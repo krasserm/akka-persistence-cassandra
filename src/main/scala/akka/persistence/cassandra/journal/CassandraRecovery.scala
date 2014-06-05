@@ -60,7 +60,9 @@ trait CassandraRecovery { this: CassandraJournal =>
         val row = iter.next()
         val marker = row.getString("marker")
         val snr = row.getLong("sequence_nr")
-        if (marker == "A") {
+        if (marker == "H") {
+          // ignore header
+        } else if (marker == "A") {
           val m = persistentFromByteBuffer(row.getBytes("message"))
           // there may be duplicates returned by iter
           // (on scan boundaries within a partition)
