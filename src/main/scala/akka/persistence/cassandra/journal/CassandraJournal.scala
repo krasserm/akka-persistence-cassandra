@@ -34,6 +34,11 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     clusterBuilder.withPort(config.getInt("port"))
   }
 
+  if(config.hasPath("use-ssl") && config.getBoolean("use-ssl")) {
+    // Uses default SSLContext; customize per <http://docs.oracle.com/javase/6/docs/technotes/guides/security/jsse/JSSERefGuide.html#Customization>
+    clusterBuilder.withSSL()
+  }
+
   if(config.hasPath("authentication")) {
     clusterBuilder.withCredentials(
       config.getString("authentication.username"),
