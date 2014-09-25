@@ -5,6 +5,8 @@ scala:
 jdk:
   - oraclejdk8
   - openjdk7
+env:
+  - SBT_OPTS="-Xmx2g"
 branches:
   except:
     - /^wip-.*$/
