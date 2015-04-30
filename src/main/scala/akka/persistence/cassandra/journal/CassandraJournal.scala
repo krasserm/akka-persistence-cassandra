@@ -43,12 +43,6 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     }
   }
 
-  def asyncWriteConfirmations(confirmations: Seq[PersistentConfirmation]): Future[Unit] = executeBatch { batch =>
-    confirmations.foreach { c =>
-      batch.add((preparedConfirmMessage.bind(c.persistenceId, partitionNr(c.sequenceNr): JLong, c.sequenceNr: JLong, confirmMarker(c.channelId))))
-    }
-  }
-
   def asyncDeleteMessages(messageIds: Seq[PersistentId], permanent: Boolean): Future[Unit] = executeBatch { batch =>
     messageIds.foreach { mid =>
       val stmt =
@@ -84,9 +78,6 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   def persistentFromByteBuffer(b: ByteBuffer): PersistentRepr = {
     serialization.deserialize(Bytes.getArray(b), classOf[PersistentRepr]).get
   }
-
-  private def confirmMarker(channelId: String) =
-    s"C-${channelId}"
 
   override def postStop(): Unit = {
     session.close()

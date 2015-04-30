@@ -69,9 +69,6 @@ trait CassandraRecovery { this: CassandraJournal =>
           if (snr == c.sequenceNr) c = m else n = m
         } else if (marker == "B" && c.sequenceNr == snr) {
           c = c.update(deleted = true)
-        } else if (c.sequenceNr == snr) {
-          val channelId = marker.substring(2)
-          c = c.update(confirms = channelId +: c.confirms)
         }
       }
     }
