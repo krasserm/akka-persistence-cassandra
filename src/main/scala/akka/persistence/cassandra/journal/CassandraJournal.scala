@@ -26,7 +26,12 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
 
   case class MessageId(persistenceId: String, sequenceNr: Long)
 
-  if (config.keyspaceAutoCreate) session.execute(createKeyspace)
+  if (config.keyspaceAutoCreate) {
+    retry(config.keyspaceAutoCreateRetries) {
+      session.execute(createKeyspace)
+    }
+  }
+  
   session.execute(createTable)
 
   val preparedWriteHeader = session.prepare(writeHeader)
