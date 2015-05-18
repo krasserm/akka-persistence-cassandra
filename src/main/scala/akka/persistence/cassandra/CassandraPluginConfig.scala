@@ -1,11 +1,16 @@
 package akka.persistence.cassandra
 
+import java.io.{File, FileInputStream, InputStream}
 import java.net.InetSocketAddress
+import java.security.{KeyStore, SecureRandom}
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 
 import com.datastax.driver.core.policies.DCAwareRoundRobinPolicy
-import com.datastax.driver.core.{Cluster, ConsistencyLevel}
+import com.datastax.driver.core.{Cluster, ConsistencyLevel, SSLOptions}
 import com.typesafe.config.Config
+
 import scala.collection.JavaConverters._
+
 
 class CassandraPluginConfig(config: Config) {
 
@@ -40,6 +45,15 @@ class CassandraPluginConfig(config: Config) {
     clusterBuilder.withLoadBalancingPolicy(
       new DCAwareRoundRobinPolicy(config.getString("local-datacenter"))
     )
+  }
+
+  if(config.hasPath("ssl")) {
+    val trustStore: InputStream = new FileInputStream(new File(config.getString("ssl.truststore.path")))
+    val trustStorePW: String = config.getString("ssl.truststore.password")
+    val keyStore: InputStream = new FileInputStream(new File(config.getString("ssl.keystore.path")))
+    val keyStorePW: String = config.getString("ssl.keystore.password")
+    val context:SSLContext = getContext(trustStore,trustStorePW,keyStore,keyStorePW)
+    clusterBuilder.withSSL(new SSLOptions(context,SSLOptions.DEFAULT_SSL_CIPHER_SUITES))
   }
 }
 
@@ -84,5 +98,25 @@ object CassandraPluginConfig {
       case "networktopologystrategy" => s"'NetworkTopologyStrategy',${getDataCenterReplicationFactorList(dataCenterReplicationFactors)}"
       case unknownStrategy => throw new IllegalArgumentException(s"$unknownStrategy as replication strategy is unknown and not supported.")
     }
+  }
+
+  /**
+   * creates a new SSLContext
+   */
+  def getContext(truststore:InputStream,
+                 truststorePassword:String,
+                 keystore:InputStream,
+                 keystorePassword:String):SSLContext = {
+    val ctx = SSLContext.getInstance("SSL")
+    val ts = KeyStore.getInstance("JKS")
+    ts.load(truststore, truststorePassword.toCharArray)
+    val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+    tmf.init(ts)
+    val ks = KeyStore.getInstance("JKS")
+    ks.load(keystore, keystorePassword.toCharArray)
+    val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm)
+    kmf.init(ks, keystorePassword.toCharArray)
+    ctx.init(kmf.getKeyManagers, tmf.getTrustManagers, new SecureRandom())
+    ctx
   }
 }
