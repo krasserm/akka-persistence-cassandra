@@ -1,13 +1,9 @@
 package akka.persistence.cassandra.journal
 
-import scala.concurrent.duration._
-
 import akka.persistence.journal._
 import akka.persistence.cassandra.CassandraLifecycle
 
 import com.typesafe.config.ConfigFactory
-
-import org.scalatest.BeforeAndAfterAll
 
 object CassandraJournalConfiguration {
   lazy val config = ConfigFactory.parseString(
