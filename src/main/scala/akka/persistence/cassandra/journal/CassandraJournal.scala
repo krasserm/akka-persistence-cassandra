@@ -17,6 +17,7 @@ import com.datastax.driver.core.utils.Bytes
 import scala.util.{Success, Failure, Try}
 
 class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraStatements {
+
   val config = new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
   val serialization = SerializationExtension(context.system)
 
@@ -34,12 +35,12 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
   session.execute(createTable)
 
-  val preparedWriteHeader = session.prepare(writeHeader)
   val preparedWriteMessage = session.prepare(writeMessage)
   val preparedConfirmMessage = session.prepare(confirmMessage)
   val preparedDeletePermanent = session.prepare(deleteMessage)
-  val preparedSelectHeader = session.prepare(selectHeader).setConsistencyLevel(readConsistency)
   val preparedSelectMessages = session.prepare(selectMessages).setConsistencyLevel(readConsistency)
+  val preparedCheckInUse = session.prepare(selectInUse).setConsistencyLevel(readConsistency)
+  val preparedWriteInUse = session.prepare(writeInUse)
 
   def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     val groupedStatements = messages.map(statementGroup)
@@ -54,24 +55,40 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   private def statementGroup(atomicWrite: AtomicWrite): Try[Seq[BoundStatement]] = Try {
-    atomicWrite.payload.flatMap { m =>
-      val pnr = partitionNr(m.sequenceNr)
-      val write = preparedWriteMessage.bind(m.persistenceId, pnr: JLong, m.sequenceNr: JLong, persistentToByteBuffer(m))
-      if (partitionNew(m.sequenceNr)) Seq(preparedWriteHeader.bind(m.persistenceId, pnr: JLong), write) else Seq(write)
+    // hoping to remove this in 2.4-M3 https://github.com/akka/akka/issues/18076
+    val maxPnr = partitionNr(atomicWrite.payload.last.sequenceNr)
+    val firstSeq: JLong = atomicWrite.payload.head.sequenceNr
+    val minPnr: JLong = partitionNr(firstSeq)
+    val persistenceId: String = atomicWrite.payload.head.persistenceId
+
+    // reading assumes sequence numbers are in the right partition or partition + 1
+    // even if we did allow this it would perform terribly as large C* batches are not good
+    if (maxPnr - minPnr > 1) throw new RuntimeException("Do not support AtomicWrites that span 3 partitions. Keep AtomicWrites <= max partition size.")
+
+    val writes: Seq[BoundStatement] = atomicWrite.payload.map { m =>
+      preparedWriteMessage.bind(m.persistenceId, maxPnr: JLong, m.sequenceNr: JLong, persistentToByteBuffer(m))
     }
+    // in case we skip an entire partition we want to make sure the empty partition has in in-use flag so scans
+    // keep going when they encounter it
+    if (partitionNew(firstSeq) && minPnr != maxPnr) writes :+ preparedWriteInUse.bind(persistenceId, minPnr)
+    else writes
+
   }
 
   private def asyncDeleteMessages(messageIds: Seq[MessageId]): Future[Unit] = executeBatch { batch =>
     messageIds.foreach { mid =>
-      val stmt =
-        preparedDeletePermanent.bind(mid.persistenceId, partitionNr(mid.sequenceNr): JLong, mid.sequenceNr: JLong)
+      val firstPnr: JLong = partitionNr(mid.sequenceNr)
+      val stmt = preparedDeletePermanent.bind(mid.persistenceId, firstPnr: JLong, mid.sequenceNr: JLong)
+      // the message could be in next partition as a result of an AtomicWrite, alternative is a read before write
+      val stmt2 = preparedDeletePermanent.bind(mid.persistenceId, firstPnr+1: JLong, mid.sequenceNr: JLong)
       batch.add(stmt)
+      batch.add(stmt2)
     }
   }
 
   def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
     val fromSequenceNr = readLowestSequenceNr(persistenceId, 1L)
-    val asyncDeletions = (fromSequenceNr to toSequenceNr).grouped(persistence.settings.journal.maxDeletionBatchSize).map { group =>
+    val asyncDeletions = (fromSequenceNr to toSequenceNr).grouped(persistence.settings.journal.maxDeletionBatchSize / 2).map { group =>
       asyncDeleteMessages(group map (MessageId(persistenceId, _)))
     }
     Future.sequence(asyncDeletions).map(_ => ())
@@ -84,10 +101,10 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   def partitionNr(sequenceNr: Long): Long =
-    (sequenceNr - 1L) / maxPartitionSize
+    (sequenceNr - 1L) / targetPartitionSize
 
   private def partitionNew(sequenceNr: Long): Boolean =
-    (sequenceNr - 1L) % maxPartitionSize == 0L
+    (sequenceNr - 1L) % targetPartitionSize == 0L
 
   private def persistentToByteBuffer(p: PersistentRepr): ByteBuffer =
     ByteBuffer.wrap(serialization.serialize(p).get)
