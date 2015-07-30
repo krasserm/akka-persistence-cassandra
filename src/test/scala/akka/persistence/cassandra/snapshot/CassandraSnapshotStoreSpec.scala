@@ -6,22 +6,13 @@ import java.nio.ByteBuffer
 import akka.persistence._
 import akka.persistence.SnapshotProtocol._
 import akka.persistence.cassandra.CassandraLifecycle
+import akka.persistence.cassandra.TestConfig
 import akka.persistence.snapshot.SnapshotStoreSpec
 import akka.testkit.TestProbe
 
 import com.datastax.driver.core._
-import com.typesafe.config.ConfigFactory
 
-class CassandraSnapshotStoreSpec extends SnapshotStoreSpec with CassandraLifecycle {
-  lazy val config = ConfigFactory.parseString(
-    """
-      |akka.persistence.journal.plugin = "cassandra-journal"
-      |akka.persistence.snapshot-store.plugin = "cassandra-snapshot-store"
-      |akka.test.single-expect-default = 10s
-      |cassandra-journal.port = 9142
-      |cassandra-snapshot-store.port = 9142
-      |cassandra-snapshot-store.max-metadata-result-size = 2
-    """.stripMargin)
+class CassandraSnapshotStoreSpec extends SnapshotStoreSpec(TestConfig.config) with CassandraLifecycle {
 
   val storeConfig = new CassandraSnapshotStoreConfig(system.settings.config.getConfig("cassandra-snapshot-store"))
   val storeStatements = new CassandraStatements { def config = storeConfig }
