@@ -44,14 +44,22 @@ trait CassandraSnapshotStoreEndpoint extends Actor {
         case e ⇒ SaveSnapshotFailure(metadata, e)
       } pipeTo p
     case d @ DeleteSnapshot(metadata) ⇒
+      val replyTo = sender()
       deleteAsync(metadata) onComplete {
-        case Success(_) => if (publish) context.system.eventStream.publish(d)
-        case Failure(_) =>
+        case Success(_) =>
+          if (publish) context.system.eventStream.publish(d)
+          replyTo ! DeleteSnapshotSuccess(metadata)
+        case Failure(t) =>
+          replyTo ! DeleteSnapshotFailure(metadata, t)
       }
     case d @ DeleteSnapshots(processorId, criteria) ⇒
+      val replyTo = sender()
       deleteAsync(processorId, criteria) onComplete {
-        case Success(_) => if (publish) context.system.eventStream.publish(d)
-        case Failure(_) =>
+        case Success(_) =>
+          if (publish) context.system.eventStream.publish(d)
+          replyTo ! DeleteSnapshotsSuccess(criteria)
+        case Failure(t) =>
+          replyTo ! DeleteSnapshotsFailure(criteria, t)
       }
   }
 
@@ -114,7 +122,7 @@ class CassandraSnapshotStore extends CassandraSnapshotStoreEndpoint with Cassand
 
   def deleteAsync(metadata: SnapshotMetadata): Future[Unit] = {
     val stmt = preparedDeleteSnapshot.bind(metadata.persistenceId, metadata.sequenceNr: JLong)
-    session.executeAsync(stmt).map(_ => ())
+    session.executeAsync(stmt).map(r => ())
   }
 
   def deleteAsync(processorId: String, criteria: SnapshotSelectionCriteria): Future[Unit] = for {

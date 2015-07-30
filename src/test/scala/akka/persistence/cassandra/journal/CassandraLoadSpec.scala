@@ -3,6 +3,7 @@ package akka.persistence.cassandra.journal
 import akka.actor._
 import akka.persistence._
 import akka.persistence.cassandra.CassandraLifecycle
+import akka.persistence.cassandra.TestConfig
 import akka.testkit._
 import com.typesafe.config.ConfigFactory
 import org.scalatest._
@@ -13,14 +14,9 @@ import scala.language.postfixOps
 object CassandraLoadSpec {
   val config = ConfigFactory.parseString(
     """
-      |akka.persistence.journal.plugin = "cassandra-journal"
-      |akka.persistence.snapshot-store.plugin = "cassandra-snapshot-store"
-      |akka.test.single-expect-default = 10s
-      |cassandra-journal.port = 9142
-      |cassandra-snapshot-store.port = 9142
       |cassandra-journal.replication-strategy = NetworkTopologyStrategy
       |cassandra-journal.data-center-replication-factors = ["dc1:1"]
-    """.stripMargin)
+    """.stripMargin).withFallback(TestConfig.config)
 
   trait Measure extends { this: Actor ⇒
     val NanoToSecond = 1000.0 * 1000 * 1000
@@ -50,9 +46,9 @@ object CassandraLoadSpec {
 
     def receiveCommand: Receive = {
       case c @ "start" =>
-        defer(c) { _ => startMeasure(); sender ! "started" }
+        deferAsync(c) { _ => startMeasure(); sender ! "started" }
       case c @ "stop" =>
-        defer(c) { _ => stopMeasure() }
+        deferAsync(c) { _ => stopMeasure() }
       case payload: String =>
         persistAsync(payload)(handle)
     }
@@ -62,7 +58,7 @@ object CassandraLoadSpec {
     }
   }
 
-  class ProcessorB(val persistenceId: String, failAt: Option[Long]) extends PersistentActor {
+  class ProcessorB(val persistenceId: String, replyTo: ActorRef) extends PersistentActor {
     def receiveRecover: Receive = handle
 
     def receiveCommand: Receive = {
@@ -71,7 +67,7 @@ object CassandraLoadSpec {
 
     def handle: Receive = {
       case payload: String =>
-        sender ! s"${payload}-${lastSequenceNr}"
+        replyTo ! s"${payload}-${lastSequenceNr}"
     }
   }
 }
@@ -94,16 +90,18 @@ class CassandraLoadSpec extends TestKit(ActorSystem("test", config)) with Implic
     }
     "work properly under load" in {
       val cycles = 1000L
+      val listener1 = TestProbe()
+      val listener2 = TestProbe()
 
-      val processor1 = system.actorOf(Props(classOf[ProcessorB], "p1b", None))
+      val processor1 = system.actorOf(Props(classOf[ProcessorB], "p1b", listener1.ref))
       1L to cycles foreach { i => processor1 ! "a" }
-      1L to cycles foreach { i => expectMsg(s"a-${i}") }
+      1L to cycles foreach { i => listener1.expectMsg(s"a-${i}") }
 
-      val processor2 = system.actorOf(Props(classOf[ProcessorB], "p1b", None))
-      1L to cycles foreach { i => expectMsg(s"a-${i}") }
+      val processor2 = system.actorOf(Props(classOf[ProcessorB], "p1b", listener2.ref))
+      1L to cycles foreach { i => listener2.expectMsg(s"a-${i}") }
 
       processor2 ! "b"
-      expectMsg(s"b-${cycles + 1L}")
+      listener2.expectMsg(s"b-${cycles + 1L}")
     }
   }
 }
