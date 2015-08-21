@@ -9,4 +9,5 @@ class CassandraJournalConfig(config: Config) extends CassandraPluginConfig(confi
   val targetPartitionSize: Int = config.getInt("target-partition-size") // TODO: make persistent
   val maxResultSize: Int = config.getInt("max-result-size")
   val gc_grace_seconds: Long = config.getLong("gc-grace-seconds")
+  val maxMessageBatchSize = config.getInt("max-message-batch-size")
 }

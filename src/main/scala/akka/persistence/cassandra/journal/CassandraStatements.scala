@@ -24,11 +24,6 @@ trait CassandraStatements {
       VALUES (?, ?, ?, ?, true)
     """
 
-  def confirmMessage = s"""
-      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, message)
-      VALUES (?, ?, ?, 0x00)
-    """
-
   def deleteMessage = s"""
       DELETE FROM ${tableName} WHERE
         persistence_id = ? AND
@@ -50,6 +45,15 @@ trait CassandraStatements {
        SELECT used from ${tableName}
        WHERE persistence_id = ? AND
        partition_nr = ?
+     """
+
+  def selectHighestSequenceNr =
+    s"""
+       SELECT sequence_nr FROM ${tableName} WHERE
+       persistence_id = ? AND
+       partition_nr = ?
+       ORDER BY sequence_nr
+       DESC LIMIT 1
      """
 
   def writeInUse =
