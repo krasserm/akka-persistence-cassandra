@@ -64,7 +64,7 @@ class CassandraSslSpec extends TestKit(ActorSystem("test", config))
   "A Cassandra journal" ignore {
     "write messages over SSL" in {
       val processor1 = system.actorOf(Props(classOf[ProcessorA], "p1"))
-      1L to 16L foreach { i =>
+      2L to 16L foreach { i =>
         processor1 ! s"a-${i}"
         expectMsgAllOf(s"a-${i}", i, false)
       }

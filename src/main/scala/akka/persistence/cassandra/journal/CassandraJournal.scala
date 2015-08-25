@@ -17,7 +17,9 @@ import com.datastax.driver.core.utils.Bytes
 import scala.util.{Success, Failure, Try}
 
 class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraStatements {
-  val config = new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
+  val config = new CassandraJournalConfig(
+    context.system.settings.config.getConfig("cassandra-journal").withFallback(
+      context.system.settings.config.getConfig("akka.persistence.journal-plugin-fallback")))
   val serialization = SerializationExtension(context.system)
 
   import config._
@@ -70,8 +72,8 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
-    val fromSequenceNr = readLowestSequenceNr(persistenceId, 1L)
-    val asyncDeletions = (fromSequenceNr to toSequenceNr).grouped(persistence.settings.journal.maxDeletionBatchSize).map { group =>
+    val fromSequenceNr = readLowestSequenceNr(persistenceId, 1)
+    val asyncDeletions = (fromSequenceNr to toSequenceNr).grouped(maxMessageBatchSize).map { group =>
       asyncDeleteMessages(group map (MessageId(persistenceId, _)))
     }
     Future.sequence(asyncDeletions).map(_ => ())
@@ -84,10 +86,10 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   def partitionNr(sequenceNr: Long): Long =
-    (sequenceNr - 1L) / maxPartitionSize
+    (sequenceNr - firstSequenceNumber) / maxPartitionSize
 
   private def partitionNew(sequenceNr: Long): Boolean =
-    (sequenceNr - 1L) % maxPartitionSize == 0L
+    (sequenceNr - firstSequenceNumber) % maxPartitionSize == 0L
 
   private def persistentToByteBuffer(p: PersistentRepr): ByteBuffer =
     ByteBuffer.wrap(serialization.serialize(p).get)

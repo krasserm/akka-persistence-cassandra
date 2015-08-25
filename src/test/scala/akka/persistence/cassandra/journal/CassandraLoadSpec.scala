@@ -85,10 +85,10 @@ class CassandraLoadSpec extends TestKit(ActorSystem("test", config)) with Implic
       val loadCycles = 1000L
 
       val processor1 = system.actorOf(Props(classOf[ProcessorA], "p1a"))
-      1L to warmCycles foreach { i => processor1 ! "a" }
+      2L to warmCycles foreach { i => processor1 ! "a" }
       processor1 ! "start"
       expectMsg("started")
-      1L to loadCycles foreach { i => processor1 ! "a" }
+      2L to loadCycles foreach { i => processor1 ! "a" }
       processor1 ! "stop"
       expectMsgPF(100 seconds) { case throughput: Double ⇒ println(f"\nthroughput = $throughput%.2f persistent commands per second") }
     }
@@ -96,11 +96,11 @@ class CassandraLoadSpec extends TestKit(ActorSystem("test", config)) with Implic
       val cycles = 1000L
 
       val processor1 = system.actorOf(Props(classOf[ProcessorB], "p1b", None, self))
-      1L to cycles foreach { i => processor1 ! "a" }
-      1L to cycles foreach { i => expectMsg(s"a-${i}") }
+      2L to cycles foreach { i => processor1 ! "a" }
+      2L to cycles foreach { i => expectMsg(s"a-${i}") }
 
       val processor2 = system.actorOf(Props(classOf[ProcessorB], "p1b", None, self))
-      1L to cycles foreach { i => expectMsg(s"a-${i}") }
+      2L to cycles foreach { i => expectMsg(s"a-${i}") }
 
       processor2 ! "b"
       expectMsg(s"b-${cycles + 1L}")

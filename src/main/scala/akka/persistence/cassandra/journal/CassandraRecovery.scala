@@ -20,13 +20,15 @@ trait CassandraRecovery { this: CassandraJournal =>
     Future { readHighestSequenceNr(persistenceId, fromSequenceNr ) }
 
   def readHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Long =
-    new MessageIterator(persistenceId, math.max(1L, fromSequenceNr), Long.MaxValue, Long.MaxValue).foldLeft(fromSequenceNr) { case (acc, msg) => msg.sequenceNr }
+    new MessageIterator(persistenceId, math.max(firstSequenceNumber, fromSequenceNr), Long.MaxValue, Long.MaxValue).foldLeft(fromSequenceNr) { case (acc, msg) => msg
+      .sequenceNr }
 
   def readLowestSequenceNr(persistenceId: String, fromSequenceNr: Long): Long =
     new MessageIterator(persistenceId, fromSequenceNr, Long.MaxValue, Long.MaxValue).find(!_.deleted).map(_.sequenceNr).getOrElse(fromSequenceNr)
 
-  def replayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: (PersistentRepr) => Unit): Unit =
+  def replayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: (PersistentRepr) => Unit): Unit = {
     new MessageIterator(persistenceId, fromSequenceNr, toSequenceNr, max).foreach(replayCallback)
+  }
 
   /**
    * Iterator over messages, crossing partition boundaries.
@@ -123,9 +125,9 @@ trait CassandraRecovery { this: CassandraJournal =>
     }
 
     private def sequenceNrMin(partitionNr: Long): Long =
-      partitionNr * maxPartitionSize + 1L
+      partitionNr * maxPartitionSize + firstSequenceNumber
 
     private def sequenceNrMax(partitionNr: Long): Long =
-      (partitionNr + 1L) * maxPartitionSize
+      (partitionNr + firstSequenceNumber) * maxPartitionSize
   }
 }
