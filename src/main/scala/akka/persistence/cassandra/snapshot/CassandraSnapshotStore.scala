@@ -18,7 +18,10 @@ import com.datastax.driver.core._
 import com.datastax.driver.core.utils.Bytes
 
 class CassandraSnapshotStore extends SnapshotStore with CassandraStatements with ActorLogging {
-  val config = new CassandraSnapshotStoreConfig(context.system.settings.config.getConfig("cassandra-snapshot-store"))
+  val config = new CassandraSnapshotStoreConfig(
+    context.system.settings.config.getConfig("cassandra-snapshot-store").withFallback(
+      context.system.settings.config.getConfig("akka.persistence.snapshot-store-plugin-fallback")
+    ))
   val serialization = SerializationExtension(context.system)
 
   import context.dispatcher
