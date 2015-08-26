@@ -18,23 +18,21 @@ trait CassandraRecovery { this: CassandraJournal =>
 
   def asyncReadHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Future[Long] = {
     Future {
-      val result = readHighestSequenceNr(persistenceId, fromSequenceNr)
+      val highestSequenceNr = readHighestSequenceNr(persistenceId, fromSequenceNr)
       //TODO: Workaround for akka issue https://github.com/akka/akka/issues/18320
-      // should always return max(..)
-      if (fromSequenceNr != 1) Math.max(fromSequenceNr, result)
-      else result
+      // should always return Math.max(fromSequenceNr, hightestSequenceNr.get, 1) when issue is fixed and default to 1L
+      if (highestSequenceNr.isDefined) Math.max(fromSequenceNr, highestSequenceNr.get)
+      else Math.max(0, fromSequenceNr - 1)
     }
   }
 
-  def readHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Long = {
-    Option(session.execute(preparedHighestSequenceNr.bind(persistenceId, fromSequenceNr: JLong)).one).map(_.getLong("sequence_nr")).getOrElse(0L)
+  def readHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Option[Long] = {
+    Option(session.execute(preparedHighestSequenceNr.bind(persistenceId, fromSequenceNr: JLong)).one).map(_.getLong("sequence_nr"))
   }
 
-  def readLowestSequenceNr(persistenceId: String, fromSequenceNr: Long): Long =
-    Option(session.execute(preparedLowestSequenceNr.bind(persistenceId, fromSequenceNr: JLong)).one).map(_.getLong("sequence_nr")).getOrElse(0L)
-
-  def replayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: (PersistentRepr) => Unit): Unit =
+  def replayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: (PersistentRepr) => Unit): Unit = {
     new MessageIterator(persistenceId, fromSequenceNr, toSequenceNr, max).foreach(replayCallback)
+  }
 
   /**
    * Iterator over messages, crossing partition boundaries.

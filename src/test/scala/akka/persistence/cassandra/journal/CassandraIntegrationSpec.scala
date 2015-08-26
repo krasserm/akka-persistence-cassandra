@@ -112,7 +112,7 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
       expectMsgAllOf(s"a-${i}", i, false)
     }
 
-    processor1 ! DeleteTo(3)
+    processor1 ! DeleteTo(3L)
     awaitRangeDeletion(deleteProbe)
 
     system.actorOf(Props(classOf[ProcessorA], persistenceId, self))
@@ -120,7 +120,7 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
       expectMsgAllOf(s"a-${i}", i, true)
     }
 
-    processor1 ! DeleteTo(6)
+    processor1 ! DeleteTo(6L)
     awaitRangeDeletion(deleteProbe)
 
     system.actorOf(Props(classOf[ProcessorA], persistenceId, self))
@@ -153,7 +153,7 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
     "replay messages incrementally" in {
       val probe = TestProbe()
       val processor1 = system.actorOf(Props(classOf[ProcessorA], "p7", self))
-      1L to 7L foreach { i =>
+      1L to 6L foreach { i =>
         processor1 ! s"a-${i}"
         expectMsgAllOf(s"a-${i}", i, false)
       }
@@ -162,15 +162,15 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
       probe.expectNoMsg(200.millis)
 
       view ! Update(await = true, replayMax = 3L)
-      probe.expectMsg(s"a-1")
-      probe.expectMsg(s"a-2")
-      probe.expectMsg(s"a-3")
+      probe.expectMsg("a-1")
+      probe.expectMsg("a-2")
+      probe.expectMsg("a-3")
       probe.expectNoMsg(200.millis)
 
       view ! Update(await = true, replayMax = 3L)
-      probe.expectMsg(s"a-4")
-      probe.expectMsg(s"a-5")
-      probe.expectMsg(s"a-6")
+      probe.expectMsg("a-4")
+      probe.expectMsg("a-5")
+      probe.expectMsg("a-6")
       probe.expectNoMsg(200.millis)
     }
   }
@@ -179,63 +179,62 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
     "recover from a snapshot with follow-up messages" in {
       val processor1 = system.actorOf(Props(classOf[ProcessorC], "p10", testActor))
       processor1 ! "a"
-      expectMsg(s"updated-a-1")
+      expectMsg("updated-a-1")
       processor1 ! "snap"
-      expectMsg(s"snapped-a-1")
+      expectMsg("snapped-a-1")
       processor1 ! "b"
-      expectMsg(s"updated-b-2")
+      expectMsg("updated-b-2")
 
       system.actorOf(Props(classOf[ProcessorC], "p10", testActor))
-      expectMsg(s"offered-a-1")
-      expectMsg(s"updated-b-2")
+      expectMsg("offered-a-1")
+      expectMsg("updated-b-2")
     }
 
     "recover from a snapshot with follow-up messages and an upper bound" in {
       val processor1 = system.actorOf(Props(classOf[ProcessorCNoRecover], "p11", 1L, testActor))
-      processor1 ! Recovery()
       processor1 ! "a"
-      expectMsg(s"updated-a-1")
+      expectMsg("updated-a-1")
       processor1 ! "snap"
-      expectMsg(s"snapped-a-1")
+      expectMsg("snapped-a-1")
       2L to 7L foreach { i =>
         processor1 ! "a"
         expectMsg(s"updated-a-${i}")
       }
 
       val processor2 = system.actorOf(Props(classOf[ProcessorCNoRecover], "p11", 3L, testActor))
-      expectMsg(s"offered-a-1")
-      expectMsg(s"updated-a-2")
-      expectMsg(s"updated-a-3")
+      expectMsg("offered-a-1")
+      expectMsg("updated-a-2")
+      expectMsg("updated-a-3")
       processor2 ! "d"
-      expectMsg(s"updated-d-8")
+      expectMsg("updated-d-8")
     }
 
     "recover from a snapshot without follow-up messages inside a partition" in {
       val processor1 = system.actorOf(Props(classOf[ProcessorC], "p12", testActor))
       processor1 ! "a"
-      expectMsg(s"updated-a-1")
+      expectMsg("updated-a-1")
       processor1 ! "snap"
-      expectMsg(s"snapped-a-1")
+      expectMsg("snapped-a-1")
 
       val processor2 = system.actorOf(Props(classOf[ProcessorC], "p12", testActor))
-      expectMsg(s"offered-a-1")
+      expectMsg("offered-a-1")
       processor2 ! "b"
-      expectMsg(s"updated-b-3")
+      expectMsg("updated-b-2")
     }
 
     "recover from a snapshot without follow-up messages at a partition boundary (where next partition is invalid)" in {
       val processor1 = system.actorOf(Props(classOf[ProcessorC], "p13", testActor))
-      1L to 6L foreach { i =>
+      1L to 5L foreach { i =>
         processor1 ! "a"
         expectMsg(s"updated-a-${i}")
       }
       processor1 ! "snap"
-      expectMsg(s"snapped-a-6")
+      expectMsg("snapped-a-5")
 
       val processor2 = system.actorOf(Props(classOf[ProcessorC], "p13", testActor))
-      expectMsg(s"offered-a-6")
+      expectMsg("offered-a-5")
       processor2 ! "b"
-      expectMsg(s"updated-b-8")
+      expectMsg("updated-b-6")
     }
 
     "recover from a snapshot without follow-up messages at a partition boundary (where next partition contains a permanently deleted message)" in {
@@ -243,23 +242,23 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
       subscribeToRangeDeletion(deleteProbe)
 
       val processor1 = system.actorOf(Props(classOf[ProcessorC], "p15", testActor))
-      1L to 6L foreach { i =>
+      1L to 5L foreach { i =>
         processor1 ! "a"
         expectMsg(s"updated-a-${i}")
       }
       processor1 ! "snap"
-      expectMsg(s"snapped-a-6")
+      expectMsg("snapped-a-5")
 
       processor1 ! "a"
-      expectMsg(s"updated-a-7")
+      expectMsg("updated-a-6")
 
-      processor1 ! DeleteTo(7)
+      processor1 ! DeleteTo(6L)
       awaitRangeDeletion(deleteProbe)
 
       val processor2 = system.actorOf(Props(classOf[ProcessorC], "p15", testActor))
-      expectMsg(s"offered-a-6")
+      expectMsg("offered-a-5")
       processor2 ! "b"
-      expectMsg(s"updated-b-8") // sequence number of permanently deleted message can be re-used
+      expectMsg("updated-b-6") // sequence number of permanently deleted message can be re-used
     }
 
     "properly recover after all messages have been deleted" in {
@@ -269,15 +268,15 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
       val p = system.actorOf(Props(classOf[ProcessorA], "p16", self))
 
       p ! "a"
-      expectMsgAllOf("a", 1, false)
+      expectMsgAllOf("a", 1L, false)
 
-      p ! DeleteTo(1)
+      p ! DeleteTo(1L)
       awaitRangeDeletion(deleteProbe)
 
       val r = system.actorOf(Props(classOf[ProcessorA], "p16", self))
 
       r ! "b"
-      expectMsgAllOf("b", 1, false)
+      expectMsgAllOf("b", 1L, false)
     }
   }
 }
