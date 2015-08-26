@@ -19,6 +19,8 @@ trait CassandraRecovery { this: CassandraJournal =>
   def asyncReadHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Future[Long] = {
     Future {
       val result = readHighestSequenceNr(persistenceId, fromSequenceNr)
+      //TODO: Workaround for akka issue https://github.com/akka/akka/issues/18320
+      // should always return max(..)
       if (fromSequenceNr != 1) Math.max(fromSequenceNr, result)
       else result
     }
