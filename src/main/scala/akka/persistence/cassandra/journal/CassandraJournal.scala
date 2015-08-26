@@ -36,12 +36,10 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
   session.execute(createTable)
 
-  val preparedWriteHeader = session.prepare(writeHeader)
   val preparedWriteMessage = session.prepare(writeMessage)
-  val preparedConfirmMessage = session.prepare(confirmMessage)
   val preparedDeletePermanent = session.prepare(deleteMessage)
-  val preparedSelectHeader = session.prepare(selectHeader).setConsistencyLevel(readConsistency)
   val preparedSelectMessages = session.prepare(selectMessages).setConsistencyLevel(readConsistency)
+  val preparedHighestSequenceNr = session.prepare(preparedHighestSequenceNrMessage)
 
   def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     val groupedStatements = messages.map(statementGroup)
@@ -57,16 +55,14 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
 
   private def statementGroup(atomicWrite: AtomicWrite): Try[Seq[BoundStatement]] = Try {
     atomicWrite.payload.flatMap { m =>
-      val pnr = partitionNr(m.sequenceNr)
-      val write = preparedWriteMessage.bind(m.persistenceId, pnr: JLong, m.sequenceNr: JLong, persistentToByteBuffer(m))
-      if (partitionNew(m.sequenceNr)) Seq(preparedWriteHeader.bind(m.persistenceId, pnr: JLong), write) else Seq(write)
+      Seq(preparedWriteMessage.bind(m.persistenceId, m.sequenceNr: JLong, persistentToByteBuffer(m)))
     }
   }
 
   private def asyncDeleteMessages(messageIds: Seq[MessageId]): Future[Unit] = executeBatch { batch =>
     messageIds.foreach { mid =>
       val stmt =
-        preparedDeletePermanent.bind(mid.persistenceId, partitionNr(mid.sequenceNr): JLong, mid.sequenceNr: JLong)
+        preparedDeletePermanent.bind(mid.persistenceId, mid.sequenceNr: JLong)
       batch.add(stmt)
     }
   }
@@ -84,12 +80,6 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     body(batch)
     session.executeAsync(batch).map(_ => ())
   }
-
-  def partitionNr(sequenceNr: Long): Long =
-    (sequenceNr - firstSequenceNumber) / maxPartitionSize
-
-  private def partitionNew(sequenceNr: Long): Boolean =
-    (sequenceNr - firstSequenceNumber) % maxPartitionSize == 0L
 
   private def persistentToByteBuffer(p: PersistentRepr): ByteBuffer =
     ByteBuffer.wrap(serialization.serialize(p).get)
