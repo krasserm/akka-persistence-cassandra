@@ -29,7 +29,7 @@ trait CassandraRecovery { this: CassandraJournal =>
   }
 
   def readLowestSequenceNr(persistenceId: String, fromSequenceNr: Long): Long =
-    new MessageIterator(persistenceId, fromSequenceNr, Long.MaxValue, Long.MaxValue).find(!_.deleted).map(_.sequenceNr).getOrElse(fromSequenceNr)
+    Option(session.execute(preparedLowestSequenceNr.bind(persistenceId, fromSequenceNr: JLong)).one).map(_.getLong("sequence_nr")).getOrElse(0L)
 
   def replayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(replayCallback: (PersistentRepr) => Unit): Unit =
     new MessageIterator(persistenceId, fromSequenceNr, toSequenceNr, max).foreach(replayCallback)

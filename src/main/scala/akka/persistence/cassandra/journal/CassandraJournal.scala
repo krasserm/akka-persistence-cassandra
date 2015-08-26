@@ -40,6 +40,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   val preparedDeletePermanent = session.prepare(deleteMessage)
   val preparedSelectMessages = session.prepare(selectMessages).setConsistencyLevel(readConsistency)
   val preparedHighestSequenceNr = session.prepare(preparedHighestSequenceNrMessage)
+  val preparedLowestSequenceNr = session.prepare(preparedLowestSequenceNrMessage)
 
   def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     val groupedStatements = messages.map(statementGroup)

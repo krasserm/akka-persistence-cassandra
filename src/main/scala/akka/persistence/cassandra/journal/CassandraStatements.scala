@@ -37,12 +37,20 @@ trait CassandraStatements {
         LIMIT ${config.maxResultSize}
     """
 
+  def preparedLowestSequenceNrMessage = s"""
+      SELECT * FROM ${tableName} WHERE
+        persistence_id = ? AND
+        sequence_nr >= ?
+        ORDER BY sequence_nr
+        LIMIT 1
+     """
+
   def preparedHighestSequenceNrMessage = s"""
-       SELECT * FROM ${tableName} WHERE
-       persistence_id = ? AND
-       sequence_nr >= ?
-       ORDER BY sequence_nr DESC
-       LIMIT 1
+      SELECT * FROM ${tableName} WHERE
+        persistence_id = ? AND
+        sequence_nr >= ?
+        ORDER BY sequence_nr DESC
+        LIMIT 1
      """
 
   private def tableName = s"${config.keyspace}.${config.table}"
