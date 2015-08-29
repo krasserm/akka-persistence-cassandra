@@ -119,3 +119,4 @@ To connect to the Cassandra host with SSL enabled, add the following configurati
 To limit the Cassandra hosts this plugin connects with to a specific datacenter, use the following setting:
 
 - `cassandra-snapshot-store.local-datacenter`.  The id for the local datacenter of the Cassandra hosts that this module should connect to.  By default, this property is not set resulting in Datastax's standard round robin policy being used.
+
