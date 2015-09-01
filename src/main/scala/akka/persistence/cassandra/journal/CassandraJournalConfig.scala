@@ -6,7 +6,8 @@ import akka.persistence.cassandra.CassandraPluginConfig
 
 class CassandraJournalConfig(config: Config) extends CassandraPluginConfig(config) {
   val replayDispatcherId: String = config.getString("replay-dispatcher")
-  val maxPartitionSize: Int = config.getInt("max-partition-size") // TODO: make persistent
+  val targetPartitionSize: Int = config.getInt("target-partition-size") // TODO: make persistent
   val maxResultSize: Int = config.getInt("max-result-size")
   val gc_grace_seconds: Long = config.getLong("gc-grace-seconds")
+  val maxMessageBatchSize = config.getInt("max-message-batch-size")
 }
