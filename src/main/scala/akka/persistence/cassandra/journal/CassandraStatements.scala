@@ -37,7 +37,6 @@ trait CassandraStatements {
         partition_nr = ? AND
         sequence_nr >= ? AND
         sequence_nr <= ?
-        LIMIT ${config.maxResultSize}
     """
 
   def selectInUse =
