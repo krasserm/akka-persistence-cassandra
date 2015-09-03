@@ -22,10 +22,16 @@ class CassandraPluginConfigTest extends WordSpec with MustMatchers {
       |write-consistency = QUORUM
       |contact-points = ["127.0.0.1"]
       |port = 9142
+      |max-result-size = 50
     """.stripMargin)
 
 
   "A CassandraPluginConfig" should {
+    "set the fetch size to the max result size" in {
+      val config = new CassandraPluginConfig(defaultConfig)
+      config.fetchSize must be(50)
+    }
+
     "parse config with host:port values as contact points" in {
       val configWithHostPortPair = ConfigFactory.parseString( """contact-points = ["127.0.0.1:19142", "127.0.0.1:29142"]""").withFallback(defaultConfig)
       val config = new CassandraPluginConfig(configWithHostPortPair)
