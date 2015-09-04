@@ -15,6 +15,7 @@ class CassandraPluginConfigTest extends WordSpec with MustMatchers {
       |keyspace-autocreate-retries = 1
       |keyspace = test-keyspace
       |table = test-table
+      |metadata-table = test-metadata-table
       |replication-strategy = "SimpleStrategy"
       |replication-factor = 1
       |data-center-replication-factors = []
@@ -23,6 +24,7 @@ class CassandraPluginConfigTest extends WordSpec with MustMatchers {
       |contact-points = ["127.0.0.1"]
       |port = 9142
       |max-result-size = 50
+      |delete-retries = 4
     """.stripMargin)
 
 
@@ -30,6 +32,11 @@ class CassandraPluginConfigTest extends WordSpec with MustMatchers {
     "set the fetch size to the max result size" in {
       val config = new CassandraPluginConfig(defaultConfig)
       config.fetchSize must be(50)
+    }
+
+    "set the metadata table" in {
+      val config = new CassandraPluginConfig(defaultConfig)
+      config.metadataTable must be("test-metadata-table")
     }
 
     "parse config with host:port values as contact points" in {

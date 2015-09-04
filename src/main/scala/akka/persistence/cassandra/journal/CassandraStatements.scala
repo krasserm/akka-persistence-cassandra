@@ -19,6 +19,14 @@ trait CassandraStatements {
         WITH gc_grace_seconds =${config.gc_grace_seconds}
     """
 
+  def createMetatdataTable = s"""
+      CREATE TABLE IF NOT EXISTS ${metadataTableName}(
+        persistence_id text PRIMARY KEY,
+        deleted_to bigint,
+        properties map<text,text>
+      );
+   """
+
   def writeMessage = s"""
       INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, message, used)
       VALUES (?, ?, ?, ?, true)
@@ -39,21 +47,29 @@ trait CassandraStatements {
         sequence_nr <= ?
     """
 
-  def selectInUse =
-    s"""
-       SELECT used from ${tableName}
-       WHERE persistence_id = ? AND
-       partition_nr = ?
-     """
+  def selectInUse = s"""
+     SELECT used from ${tableName} WHERE
+      persistence_id = ? AND
+      partition_nr = ?
+   """
 
-  def selectHighestSequenceNr =
-    s"""
-       SELECT sequence_nr, used FROM ${tableName} WHERE
+  def selectHighestSequenceNr = s"""
+     SELECT sequence_nr, used FROM ${tableName} WHERE
        persistence_id = ? AND
        partition_nr = ?
        ORDER BY sequence_nr
        DESC LIMIT 1
-     """
+   """
+
+  def selectDeletedTo = s"""
+      SELECT deleted_to FROM ${metadataTableName} WHERE
+        persistence_id = ?
+    """
+
+  def insertDeletedTo = s"""
+      INSERT INTO ${metadataTableName} (persistence_id, deleted_to)
+      VALUES ( ?, ? )
+    """
 
   def writeInUse =
     s"""
@@ -61,4 +77,5 @@ trait CassandraStatements {
        VALUES(?, ?, true)
      """
   private def tableName = s"${config.keyspace}.${config.table}"
+  private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"
 }
