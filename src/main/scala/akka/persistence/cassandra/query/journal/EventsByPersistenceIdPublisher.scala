@@ -60,9 +60,6 @@ private[journal] class EventsByPersistenceIdPublisher(
       // TODO: FIX
       val from = state + 1
       val to = Math.min(Math.min(state + step + 1, toSeqNr), state + max + 1)
-
-      println(s"REQUESTING FROM $from TO $to")
-
       val ret = (state to to)
         .zip(new MessageIterator(persistenceId, from, to, maxBufSize).toVector)
         .map(r => toEventEnvelope(r._2, r._1))
@@ -81,9 +78,6 @@ private[journal] class EventsByPersistenceIdPublisher(
     (buffer ++ newBuffer, state + newBuffer.size)
 
   override protected def completionCondition(state: Long): Boolean = state >= toSeqNr
-
-  override protected def fullUpdate(state: Long, oldState: Option[Long]): Boolean =
-    oldState.fold(true)(state - _ >= step)
 
   private[this] def toEventEnvelope(persistentRepr: PersistentRepr, offset: Long): EventEnvelope =
     EventEnvelope(offset, persistentRepr.persistenceId, persistentRepr.sequenceNr, persistentRepr.payload)

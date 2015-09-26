@@ -4,10 +4,8 @@ import akka.stream.actor.ActorPublisher
 
 private[journal] trait DeliveryBuffer[T] { _: ActorPublisher[T] ⇒
 
-  def deliverBuf(buf: Vector[T]): Vector[T] = {
-    println(s"DELIVERING $buf")
-
-    val b = if (buf.nonEmpty && totalDemand > 0) {
+  def deliverBuf(buf: Vector[T]): Vector[T] =
+    if (buf.nonEmpty && totalDemand > 0) {
       if (buf.size == 1) {
         onNext(buf.head)
         Vector.empty[T]
@@ -22,8 +20,4 @@ private[journal] trait DeliveryBuffer[T] { _: ActorPublisher[T] ⇒
     } else {
       buf
     }
-
-    println(s"REMAINING $b")
-    b
-  }
 }

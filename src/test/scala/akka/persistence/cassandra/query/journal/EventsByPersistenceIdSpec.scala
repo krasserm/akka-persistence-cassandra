@@ -28,7 +28,7 @@ object EventsByPersistenceIdSpec {
     akka.persistence.journal.plugin = "cassandra-journal"
     akka.test.single-expect-default = 10s
     cassandra-journal.port = 9142
-    cassandra-query-journal.cassandra-journal.port = 9142
+    cassandra-query-journal.port = 9142
     cassandra-query-journal.max-buffer-size = 10
                """
 }

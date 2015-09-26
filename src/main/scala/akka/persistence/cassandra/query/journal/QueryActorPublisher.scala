@@ -9,15 +9,13 @@ import akka.pattern.pipe
 import akka.stream.actor.ActorPublisher
 import akka.stream.actor.ActorPublisherMessage.{Cancel, Request, SubscriptionTimeoutExceeded}
 
-//TODO: Should next state decision be based on current state?
-//TODO: Database timeout and failure handling.
-//TODO: Query timeout and retry
+//TODO: Optimizations - managing the buffer size efficienly, e.g. based on nr requests etc.
+//TODO: Database timeout, retry and failure handling.
 //TODO: Write actual tests for buffer size, delivery buffer etc.
 //TODO: Test a lot in buffer but not too many demands. - Check
 //TODO: Test buffer size limit - Check
 //TODO: Buffer size limit - Check
 //TODO: Refresh interval - Check
-//TODO: Free the implementation of buffer from interface. E.g. we want it to be a set rather than vector sometimes.
 //TODO: Causal ordering - if results 100-150 are received before 50-100 the stream must wait. - Check (this should not be an issue if we only have one job)
 abstract class QueryActorPublisher[MessageType, State](
     refreshInterval: Option[FiniteDuration],
@@ -37,16 +35,15 @@ abstract class QueryActorPublisher[MessageType, State](
     super.postStop()
   }
 
-  override def receive: Receive = starting()
+  override def receive: Receive = starting
 
   /**
    * Initial state. Initialises state and buffer.
    *
    * @return Receive.
    */
-  def starting(): Receive = {
+  val starting: Receive = {
     case Request(_) =>
-      println("------------------------------------------START------------------------------------------")
       context.become(nextBehavior(Vector.empty[MessageType], initialState))
   }
 
@@ -59,14 +56,9 @@ abstract class QueryActorPublisher[MessageType, State](
    * @return Receive.
    */
   def idle(buffer: Vector[MessageType], state: State): Receive = {
-    case Continue =>
-      println("IDLE CONTINUE")
-      context.become(nextBehavior(buffer, state))
-
-    // TODO: DO we want to check for more on request or wait for update?
-    case Request(_) =>
-      println("IDLE REQUEST")
-      context.become(nextBehavior(deliverBuf(buffer), state))
+    case _: Cancel | SubscriptionTimeoutExceeded => context.stop(self)
+    case Request(_) => context.become(nextBehavior(deliverBuf(buffer), state))
+    case Continue => context.become(nextBehavior(buffer, state))
   }
 
   /**
@@ -77,53 +69,45 @@ abstract class QueryActorPublisher[MessageType, State](
    * @param state Stream state.
    * @return Receive.
    */
-  def streaming(buffer: Vector[MessageType], state: State): Receive = {
-    case _: Cancel | SubscriptionTimeoutExceeded =>
-      context.stop(self)
-
+  def requesting(buffer: Vector[MessageType], state: State): Receive = {
+    case _: Cancel | SubscriptionTimeoutExceeded => context.stop(self)
+    case Request(_) => context.become(requesting(deliverBuf(buffer), state))
     case More(newBuffer) =>
-      println("STREAMING MORE")
       val (updatedBuffer, updatedState) = updateBuffer(buffer, newBuffer, state)
-      println(s"BUFFER $updatedBuffer")
       context.become(nextBehavior(deliverBuf(updatedBuffer), updatedState, Some(state)))
-
-    case Request(_) =>
-      println("STREAMING REQUEST")
-      context.become(streaming(deliverBuf(buffer), state))
   }
-
-  private[this] def requestMore(state: State, max: Long)(implicit ec: ExecutionContext): Unit =
-    query(state, max).map(More).pipeTo(self)
-
-  private[this] def complete() = onCompleteThenStop()
 
   private[this] def nextBehavior(
       buffer: Vector[MessageType],
       newState: State,
-      oldState: Option[State] = None): Receive = {
-    println(s"DECIDING BASED ON BUFFER $buffer, NEWSTATE $newState, OLDSTATE $oldState, DEMAND $totalDemand")
-    if(buffer.isEmpty && !fullUpdate(newState, oldState)) {
-      if(refreshInterval.isDefined && !completionCondition(newState)) {
-        println("BECOMING IDLE")
-        idle(buffer, newState)
-      } else {
-        println("BECOMING END")
-        complete()
-        Actor.emptyBehavior
-      }
-      // TODO: How aggressively do we want to fill the buffer. Change to || do keep it full.
-    } else if (totalDemand > 0 && buffer.size < maxBufSize) {
-      println("BECOMING STREAMING")
+      oldState: Option[State] = None): Receive =
+    if(shouldComplete(buffer, newState, oldState)) {
+      onCompleteThenStop()
+      Actor.emptyBehavior
+    } else if(shouldRequestMore(buffer, newState, oldState)) {
       requestMore(newState, maxBufSize - buffer.size)
-      streaming(buffer, newState)
+      requesting(buffer, newState)
     } else {
-      println("BECOMING IDLE  ")
       idle(buffer, newState)
     }
-  }
+
+  private[this] def requestMore(state: State, max: Long)(implicit ec: ExecutionContext): Unit =
+    query(state, max).map(More).pipeTo(self)
+
+  private [this] def stateChanged(state: State, oldState: Option[State]): Boolean =
+    oldState.fold(true)(state == _)
+
+  private[this] def bufferEmptyAndStateUnchanged(buffer: Vector[MessageType], newState: State, oldState: Option[State] = None) =
+    buffer.isEmpty && !stateChanged(newState, oldState)
+
+  // TODO: How aggressively do we want to fill the buffer. Change to totaldemand || ... do keep it full.
+  private[this] def shouldRequestMore(buffer: Vector[MessageType], newState: State, oldState: Option[State] = None) =
+    !bufferEmptyAndStateUnchanged(buffer, newState, oldState) && totalDemand > 0 && buffer.size < maxBufSize
+
+  private[this] def shouldComplete(buffer: Vector[MessageType], newState: State, oldState: Option[State] = None) =
+    bufferEmptyAndStateUnchanged(buffer, newState, oldState) && (!refreshInterval.isDefined || completionCondition(newState))
 
   protected def query(state: State, max: Long): Future[Vector[MessageType]]
   protected def initialState: State
   protected def completionCondition(state: State): Boolean
-  protected def fullUpdate(state: State, oldState: Option[State]): Boolean
 }
