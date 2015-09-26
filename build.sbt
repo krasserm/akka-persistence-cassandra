@@ -33,7 +33,12 @@ libraryDependencies ++= Seq(
   // override cassandra unit cassandra version as there is a bug with static columns in 2.1.3
   // remove once PR https://github.com/jsevellec/cassandra-unit/pull/141 merged/released
   "org.apache.cassandra"    % "cassandra-all"                     % "2.1.8"      % "test",
-  "org.cassandraunit"       % "cassandra-unit"                    % "2.1.3.1"    % "test"
+  "org.cassandraunit"       % "cassandra-unit"                    % "2.1.3.1"    % "test",
+
+
+  "com.typesafe.akka"      %% "akka-persistence-query-experimental" % "2.4.0-RC2",
+  "com.typesafe.akka"      %% "akka-stream-experimental"            % "1.0",
+  "com.typesafe.akka"      %% "akka-stream-testkit-experimental"    % "1.0"
 )
 
 credentials += Credentials(
