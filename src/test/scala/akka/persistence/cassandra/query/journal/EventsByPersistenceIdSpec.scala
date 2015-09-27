@@ -1,65 +1,13 @@
-/**
- * Copyright (C) 2015 Typesafe Inc. <http://www.typesafe.com>
- */
 package akka.persistence.cassandra.query.journal
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
-import akka.actor.ActorRef
-import akka.actor.ActorSystem
-import akka.persistence.cassandra.CassandraLifecycle
-import akka.persistence.cassandra.journal.TestActor
-import akka.persistence.cassandra.server.CassandraServer
 import akka.persistence.query.EventsByPersistenceId
-import akka.persistence.query.PersistenceQuery
 import akka.persistence.query.RefreshInterval
-import akka.stream.ActorMaterializer
 import akka.stream.testkit.scaladsl.TestSink
-import akka.testkit.ImplicitSender
-import akka.testkit.TestKit
 import akka.persistence.query.NoRefresh
-import akka.util.Timeout
-import com.typesafe.config.ConfigFactory
-import org.scalatest.{Matchers, WordSpecLike}
 
-object EventsByPersistenceIdSpec {
-  val config = """
-    akka.loglevel = INFO
-    akka.persistence.journal.plugin = "cassandra-journal"
-    akka.test.single-expect-default = 10s
-    cassandra-journal.port = 9142
-    cassandra-query-journal.port = 9142
-    cassandra-query-journal.max-buffer-size = 10
-               """
-}
-
-class EventsByPersistenceIdSpec
-  extends TestKit(ActorSystem("EventsByPersistenceIdSpec", ConfigFactory.parseString(EventsByPersistenceIdSpec.config)))
-  with ImplicitSender //TODO: with Cleanup
-  with WordSpecLike
-  with CassandraLifecycle
-  with Matchers {
-
-  implicit val mat = ActorMaterializer()(system)
-
+class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
   val refreshInterval = RefreshInterval(1.second)
-
-  val queries = PersistenceQuery(system).readJournalFor(CassandraReadJournal.Identifier)
-
-  override protected def afterAll(): Unit = {
-    Await.result(system.terminate(), Timeout(1.second).duration)
-    super.afterAll()
-  }
-
-  def setup(persistenceId: String, n: Long): ActorRef = {
-    val ref = system.actorOf(TestActor.props(persistenceId))
-    for(i <- 1l to n) {
-      ref ! s"$persistenceId-$i"
-      expectMsg(s"$persistenceId-$i-done")
-    }
-
-    ref
-  }
 
   "Cassandra query EventsByPersistenceId" must {
     "find existing events" in {

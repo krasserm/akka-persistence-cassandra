@@ -22,6 +22,9 @@ class CassandraReadJournal(system: ExtendedActorSystem, config: Config) extends 
     case unknown                              => unsupportedQueryType(unknown)
   }
 
+  //TODO: Do we want to use materialized values?
+  //TODO: http://doc.akka.io/docs/akka/snapshot/scala/persistence-query.html#Materialized_values_of_queries
+  //TODO: It makes the use of streams less convenient as own Query's must be used.
   def eventsByPersistenceId(
       persistenceId: String,
       fromSeqNr: Long,
@@ -40,7 +43,7 @@ class CassandraReadJournal(system: ExtendedActorSystem, config: Config) extends 
         refreshInterval,
         readJournalConfig.maxBufferSize,
         readJournalConfig))
-        .mapMaterializedValue{_ => ()}
+        .mapMaterializedValue(_ => ())
         .named(name)
   }
 
