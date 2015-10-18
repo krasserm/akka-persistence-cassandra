@@ -1,6 +1,7 @@
 package akka.persistence.cassandra.journal
 
 trait CassandraStatements {
+
   def config: CassandraJournalConfig
 
   def createKeyspace = s"""
@@ -13,14 +14,17 @@ trait CassandraStatements {
         property text primary key, value text)
      """
 
+  // TODO: Fix cluster columns based on deletes/query requirements
   def createTable = s"""
       CREATE TABLE IF NOT EXISTS ${tableName} (
         used boolean static,
-        persistence_id text,
+        journal_id text,
+        journal_sequence_nr bigint,
         partition_nr bigint,
+        persistence_id text,
         sequence_nr bigint,
         message blob,
-        PRIMARY KEY ((persistence_id, partition_nr), sequence_nr))
+        PRIMARY KEY ((journal_id, partition_nr), journal_sequence_nr, persistence_id, sequence_nr))
         WITH gc_grace_seconds =${config.gc_grace_seconds}
     """
 
@@ -33,30 +37,10 @@ trait CassandraStatements {
    """
 
   def writeMessage = s"""
-      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, message, used)
-      VALUES (?, ?, ?, ?, true)
+      INSERT INTO ${tableName} (journal_id, partition_nr, journal_sequence_nr, persistence_id, sequence_nr, message, used)
+      VALUES (?, ?, ?, ?, ?, ?, true)
     """
 
-  def deleteMessage = s"""
-      DELETE FROM ${tableName} WHERE
-        persistence_id = ? AND
-        partition_nr = ? AND
-        sequence_nr = ?
-    """
-
-  def selectMessages = s"""
-      SELECT * FROM ${tableName} WHERE
-        persistence_id = ? AND
-        partition_nr = ? AND
-        sequence_nr >= ? AND
-        sequence_nr <= ?
-    """
-
-  def selectInUse = s"""
-     SELECT used from ${tableName} WHERE
-      persistence_id = ? AND
-      partition_nr = ?
-   """
   def selectConfig = s"""
       SELECT * FROM ${configTableName}
     """
@@ -65,30 +49,12 @@ trait CassandraStatements {
       INSERT INTO ${configTableName}(property, value) VALUES(?, ?)
     """
 
-  def selectHighestSequenceNr = s"""
-     SELECT sequence_nr, used FROM ${tableName} WHERE
-       persistence_id = ? AND
-       partition_nr = ?
-       ORDER BY sequence_nr
-       DESC LIMIT 1
-   """
-
-  def selectDeletedTo = s"""
-      SELECT deleted_to FROM ${metadataTableName} WHERE
-        persistence_id = ?
-    """
-
-  def insertDeletedTo = s"""
-      INSERT INTO ${metadataTableName} (persistence_id, deleted_to)
-      VALUES ( ?, ? )
-    """
-
   def writeInUse =
     s"""
-       INSERT INTO ${tableName} (persistence_id, partition_nr, used)
+       INSERT INTO ${tableName} (journal_id, partition_nr, used)
        VALUES(?, ?, true)
      """
-  
+
   private def tableName = s"${config.keyspace}.${config.table}"
   private def configTableName = s"${config.keyspace}.${config.configTable}"
   private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"
