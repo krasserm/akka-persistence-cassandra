@@ -90,10 +90,10 @@ private[journal] abstract class QueryActorPublisher[MessageType, State](
       buffer: Vector[MessageType],
       newState: State,
       oldState: Option[State] = None): Receive =
-    if(shouldComplete(buffer, refreshInterval, newState, oldState)) {
+    if (shouldComplete(buffer, refreshInterval, newState, oldState)) {
       onCompleteThenStop()
       Actor.emptyBehavior
-    } else if(shouldRequestMore(buffer, totalDemand, maxBufferSize, newState, oldState)) {
+    } else if (shouldRequestMore(buffer, totalDemand, maxBufferSize, newState, oldState)) {
       import context.dispatcher
       requestMore(newState, maxBufferSize - buffer.size)
       requesting(buffer, newState)
@@ -105,7 +105,7 @@ private[journal] abstract class QueryActorPublisher[MessageType, State](
     query(state, max).map(More).pipeTo(self)
 
   private [this] def stateChanged(state: State, oldState: Option[State]): Boolean =
-    oldState.fold(true)(state == _)
+    oldState.fold(true)(state != _)
 
   private[this] def bufferEmptyAndStateUnchanged(buffer: Vector[MessageType], newState: State, oldState: Option[State] = None) =
     buffer.isEmpty && !stateChanged(newState, oldState)
@@ -117,6 +117,11 @@ private[journal] abstract class QueryActorPublisher[MessageType, State](
   private[this] def shouldComplete(buffer: Vector[MessageType], refreshInterval: Option[FiniteDuration], newState: State, oldState: Option[State] = None) =
     bufferEmptyAndStateUnchanged(buffer, newState, oldState) && (!refreshInterval.isDefined || completionCondition(newState))
 
+
+  /**
+   * To be implemented by subclasses to define initial state, query, state update when query result
+   * is received and completion condition.
+   */
   protected def query(state: State, max: Long): Future[Vector[MessageType]]
   protected def initialState: State
   protected def updateBuffer(buf: Vector[MessageType], newBuf: Vector[MessageType], state: State): (Vector[MessageType], State)

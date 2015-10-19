@@ -14,7 +14,8 @@ class CassandraReadJournalSpec
   extends CassandraReadJournalSpecBase
   with ScalaFutures {
 
-  val javaQueries = PersistenceQuery(system).getReadJournalFor(classOf[javadsl.CassandraReadJournal], scaladsl.CassandraReadJournal.Identifier)
+  val javaQueries = PersistenceQuery(system)
+    .getReadJournalFor(classOf[javadsl.CassandraReadJournal], scaladsl.CassandraReadJournal.Identifier)
 
   "Cassandra Read Journal Java API" must {
     "start eventsByPersistenceId query" in {
@@ -24,9 +25,9 @@ class CassandraReadJournalSpec
     }
 
     "start current eventsByPersistenceId query" in {
-      setup("a", 1)
-      val src = javaQueries.currentEventsByPersistenceId("a", 0L, Long.MaxValue)
-      src.runWith(Sink.head, mat).map(_.persistenceId).futureValue.shouldEqual("a")
+      setup("b", 1)
+      val src = javaQueries.currentEventsByPersistenceId("b", 0L, Long.MaxValue)
+      src.runWith(Sink.head, mat).map(_.persistenceId).futureValue.shouldEqual("b")
     }
   }
 }

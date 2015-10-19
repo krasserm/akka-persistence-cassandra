@@ -54,26 +54,28 @@ private[journal] class EventsByPersistenceIdPublisher(
 
     // TODO: Async?
     Future {
-      val from = state + 1
-      val to = Math.min(Math.min(state + step + 1, toSeqNr), state + max + 1)
+      val from = state
+      val to = Math.min(Math.min(state + step, toSeqNr), state + max)
       val ret = (state to to)
         .zip(new MessageIterator(persistenceId, from, to, maxBufSize).toVector)
-        .map(r => toEventEnvelope(r._2, r._1))
+        .map(r => toEventEnvelope(r._2, r._1 - 1))
         .toVector
 
       ret
     }
   }
 
-  override protected def initialState: Long = fromSeqNr
+  override protected def initialState: Long = Math.max(1, fromSeqNr)
 
   override def updateBuffer(
       buffer: Vector[EventEnvelope],
       newBuffer: Vector[EventEnvelope],
-      state: Long): (Vector[EventEnvelope], Long) =
-    (buffer ++ newBuffer, state + newBuffer.size)
+      state: Long): (Vector[EventEnvelope], Long) = {
+    val newState = if (newBuffer.isEmpty) state else newBuffer.last.sequenceNr + 1
+    (buffer ++ newBuffer, newState)
+  }
 
-  override protected def completionCondition(state: Long): Boolean = state >= toSeqNr
+  override protected def completionCondition(state: Long): Boolean = state > toSeqNr
 
   private[this] def toEventEnvelope(persistentRepr: PersistentRepr, offset: Long): EventEnvelope =
     EventEnvelope(offset, persistentRepr.persistenceId, persistentRepr.sequenceNr, persistentRepr.payload)
