@@ -3,7 +3,7 @@ Cassandra Plugins for Akka Persistence
 
 [![Join the chat at https://gitter.im/krasserm/akka-persistence-cassandra](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/krasserm/akka-persistence-cassandra?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-Replicated [Akka Persistence](http://doc.akka.io/docs/akka/2.3.8/scala/persistence.html) journal and snapshot store backed by [Apache Cassandra](http://cassandra.apache.org/).
+Replicated [Akka Persistence](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html) journal and snapshot store backed by [Apache Cassandra](http://cassandra.apache.org/).
 
 [![Build Status](https://travis-ci.org/krasserm/akka-persistence-cassandra.svg?branch=master)](https://travis-ci.org/krasserm/akka-persistence-cassandra)
 
@@ -16,9 +16,9 @@ To include the latest release of the Cassandra plugins into your `sbt` project, 
 
     resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven"
 
-    libraryDependencies += "com.github.krasserm" %% "akka-persistence-cassandra" % "0.3.9"
+    libraryDependencies += "com.github.krasserm" %% "akka-persistence-cassandra" % "0.4"
 
-This version of `akka-persistence-cassandra` depends on Akka 2.3.9 and is cross-built against Scala 2.10.4 and 2.11.6. It is compatible with Cassandra 2.1.0 or higher. Versions of the Cassandra plugins that are compatible with Cassandra 1.2.x are maintained on the [cassandra-1.2](https://github.com/krasserm/akka-persistence-cassandra/tree/cassandra-1.2) branch.   
+This version of `akka-persistence-cassandra` depends on Akka 2.4 and Scala 2.11.6. It is compatible with Cassandra 2.1.6 or higher (versions < 2.1.6 have a static column bug). Versions of the Cassandra plugins that are compatible with Cassandra 1.2.x are maintained on the [cassandra-1.2](https://github.com/krasserm/akka-persistence-cassandra/tree/cassandra-1.2) branch.   
 
 ### Development snapshot
 
@@ -26,12 +26,12 @@ To include a current development snapshot of the Cassandra plugins into your `sb
 
     resolvers += "OJO Snapshots" at "https://oss.jfrog.org/oss-snapshot-local" 
 
-    libraryDependencies += "com.github.krasserm" %% "akka-persistence-cassandra" % "0.4-SNAPSHOT"
+    libraryDependencies += "com.github.krasserm" %% "akka-persistence-cassandra" % "0.5-SNAPSHOT"
 
-This version of `akka-persistence-cassandra` depends on Akka 2.4-RC2 and Scala 2.11.6. It is compatible with Cassandra 2.1.0 or higher.
+This version of `akka-persistence-cassandra` depends on Akka 2.4 and Scala 2.11.6. It is compatible with Cassandra 2.1.6 or higher (versions < 2.1.6 have a static column bug).
    
-Migrating from 0.3 (Akka 2.3)
------------------------------
+Migrating from 0.3.x (Akka 2.3.x)
+---------------------------------
 
 Schema and property changes mean that you can't currently upgrade from 0.3 to 0.4 SNAPSHOT and use existing data. This will be addressed in [Issue 64](https://github.com/krasserm/akka-persistence-cassandra/issues/64).
 
@@ -40,9 +40,9 @@ Journal plugin
 
 ### Features
 
-- All operations required by the Akka Persistence [journal plugin API](http://doc.akka.io/docs/akka/2.3.9/scala/persistence.html#journal-plugin-api) are fully supported.
+- All operations required by the Akka Persistence [journal plugin API](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html#journal-plugin-api) are fully supported.
 - The plugin uses Cassandra in a pure log-oriented way i.e. data are only ever inserted but never updated (deletions are made on user request only or by persistent channels, see also [Caveats](#caveats)).
-- Writes of messages and confirmations are batched to optimize throughput. See [batch writes](http://doc.akka.io/docs/akka/2.3.9/scala/persistence.html#batch-writes) for details how to configure batch sizes. The plugin was tested to work properly under high load.
+- Writes of messages and confirmations are batched to optimize throughput. See [batch writes](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html#batch-writes) for details how to configure batch sizes. The plugin was tested to work properly under high load.
 - Messages written by a single processor are partitioned across the cluster to achieve scalability with data volume by adding nodes.
 
 ### Configuration
@@ -62,7 +62,7 @@ This will run the journal with its default settings. The default settings can be
 - `cassandra-journal.replication-strategy`. Replication strategy to use. SimpleStrategy or NetworkTopologyStrategy
 - `cassandra-journal.replication-factor`. Replication factor to use when a keyspace is created by the plugin. Default value is `1`.
 - `cassandra-journal.data-center-replication-factors`. Replication factor list for data centers, e.g. ["dc1:3", "dc2:2"]. Is only used when replication-strategy is NetworkTopologyStrategy.
-- `cassandra-journal."max-message-batch-size"`. Maximum number of messages that will be batched when using `persistAsync`. Also used as the max batch size for deletes.
+- `cassandra-journal.max-message-batch-size`. Maximum number of messages that will be batched when using `persistAsync`. Also used as the max batch size for deletes.
 - `cassandra-journal.delete-retries`. Deletes are achieved using a metadata entry and then the actual messages are deleted asynchronously. Number of retries before giving up. Default value is 3. 
 - `cassandra-journal.target-partition-size`. Target number of messages per cassandra partition. Default value is 500000. Will only go above the target if you use persistAll and persistAllAsync **Do not change this setting after table creation** (not checked yet).
 - `cassandra-journal.max-result-size`. Maximum number of entries returned per query. Queries are executed recursively, if needed, to achieve recovery goals. Default value is 50001.
@@ -101,7 +101,7 @@ Snapshot store plugin
 
 ### Features
 
-- Implements its own handler of the (internal) Akka Persistence snapshot protocol, making snapshot IO fully asynchronous (i.e. does not implement the Akka Persistence [snapshot store plugin API](http://doc.akka.io/docs/akka/2.3.9/scala/persistence.html#snapshot-store-plugin-api) directly).
+- Implements its own handler of the (internal) Akka Persistence snapshot protocol, making snapshot IO fully asynchronous (i.e. does not implement the Akka Persistence [snapshot store plugin API](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html#snapshot-store-plugin-api) directly).
 
 ### Configuration
 

@@ -6,6 +6,7 @@ import scala.concurrent.duration._
 import akka.actor.{ActorRef, ActorSystem}
 import akka.persistence.cassandra.CassandraLifecycle
 import akka.persistence.cassandra.journal.TestActor
+import akka.persistence.cassandra.query.journal.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
 import akka.stream.ActorMaterializer
 import akka.testkit.{ImplicitSender, TestKit}
@@ -20,6 +21,7 @@ object CassandraReadJournalSpecBase {
     cassandra-journal.port = 9142
     cassandra-query-journal.port = 9142
     cassandra-query-journal.max-buffer-size = 10
+    cassandra-query-journal.refresh-interval = 1s
                """
 }
 
@@ -31,7 +33,7 @@ class CassandraReadJournalSpecBase
   with Matchers {
 
   implicit val mat = ActorMaterializer()(system)
-  val queries = PersistenceQuery(system).readJournalFor(CassandraReadJournal.Identifier)
+  val queries = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
   override protected def afterAll(): Unit = {
     Await.result(system.terminate(), Timeout(1.second).duration)

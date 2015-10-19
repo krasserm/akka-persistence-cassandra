@@ -1,19 +1,15 @@
 package akka.persistence.cassandra.query.journal
 
 import scala.concurrent.duration._
-import akka.persistence.query.EventsByPersistenceId
-import akka.persistence.query.RefreshInterval
 import akka.stream.testkit.scaladsl.TestSink
-import akka.persistence.query.NoRefresh
 
 class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
-  val refreshInterval = RefreshInterval(1.second)
 
   "Cassandra query EventsByPersistenceId" must {
     "find existing events" in {
       val ref = setup("a", 3)
 
-      val src = queries.query(EventsByPersistenceId("a", 0L, Long.MaxValue), NoRefresh)
+      val src = queries.currentEventsByPersistenceId("a", 0L, Long.MaxValue)
       src.map(_.event).runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("a-1", "a-2")
@@ -25,7 +21,7 @@ class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
 
     "find existing events up to a sequence number" in {
       val ref = setup("b", 3)
-      val src = queries.query(EventsByPersistenceId("b", 0L, 2L), NoRefresh)
+      val src = queries.currentEventsByPersistenceId("b", 0L, 2L)
       src.map(_.event).runWith(TestSink.probe[Any])
         .request(5)
         .expectNext("b-1", "b-2")
@@ -34,7 +30,8 @@ class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
 
     "not see new events after demand request" in {
       val ref = setup("c", 3)
-      val src = queries.query(EventsByPersistenceId("c", 0L, Long.MaxValue), NoRefresh)
+
+      val src = queries.currentEventsByPersistenceId("c", 0L, Long.MaxValue)
       val probe = src.map(_.event).runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("c-1", "c-2")
@@ -53,7 +50,7 @@ class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
     "only deliver what requested if there is more in the buffer" in {
       val ref = setup("d", 1000)
 
-      val src = queries.query(EventsByPersistenceId("d", 0L, Long.MaxValue), NoRefresh)
+      val src = queries.currentEventsByPersistenceId("d", 0L, Long.MaxValue)
       val probe = src.map(_.event).runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("d-1", "d-2")
@@ -75,7 +72,7 @@ class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
   "Cassandra live query EventsByPersistenceId" must {
     "find new events" in {
       val ref = setup("e", 3)
-      val src = queries.query(EventsByPersistenceId("e", 0L, Long.MaxValue), refreshInterval)
+      val src = queries.eventsByPersistenceId("e", 0L, Long.MaxValue)
       val probe = src.map(_.event).runWith(TestSink.probe[Any])
         .request(5)
         .expectNext("e-1", "e-2", "e-3")
@@ -88,7 +85,7 @@ class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
 
     "find new events up to a sequence number" in {
       val ref = setup("f", 3)
-      val src = queries.query(EventsByPersistenceId("f", 0L, 4L), refreshInterval)
+      val src = queries.eventsByPersistenceId("f", 0L, 4L)
       val probe = src.map(_.event).runWith(TestSink.probe[Any])
         .request(5)
         .expectNext("f-1", "f-2", "f-3")
@@ -101,7 +98,7 @@ class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
 
     "find new events after demand request" in {
       val ref = setup("g", 3)
-      val src = queries.query(EventsByPersistenceId("g", 0L, Long.MaxValue), refreshInterval)
+      val src = queries.eventsByPersistenceId("g", 0L, Long.MaxValue)
       val probe = src.map(_.event).runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("g-1", "g-2")
@@ -120,7 +117,7 @@ class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
     "only deliver what requested if there is more in the buffer" in {
       val ref = setup("h", 1000)
 
-      val src = queries.query(EventsByPersistenceId("h", 0L, Long.MaxValue), refreshInterval)
+      val src = queries.eventsByPersistenceId("h", 0L, Long.MaxValue)
       val probe = src.map(_.event).runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("h-1", "h-2")
