@@ -8,7 +8,6 @@ import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
 
-
 class CassandraPluginConfig(config: Config) {
 
   import akka.persistence.cassandra.CassandraPluginConfig._
@@ -16,19 +15,7 @@ class CassandraPluginConfig(config: Config) {
   val keyspace: String = config.getString("keyspace")
   val table: String = config.getString("table")
   val metadataTable: String = config.getString("metadata-table")
-
-  val configTable: String = validateTableName(config.getString("config-table"))
-
-  val keyspaceAutoCreate: Boolean = config.getBoolean("keyspace-autocreate")
-  val keyspaceAutoCreateRetries: Int = config.getInt("keyspace-autocreate-retries")
-
-  val replicationStrategy: String = getReplicationStrategy(
-    config.getString("replication-strategy"),
-    config.getInt("replication-factor"),
-    config.getStringList("data-center-replication-factors").asScala)
-
   val readConsistency: ConsistencyLevel = ConsistencyLevel.valueOf(config.getString("read-consistency"))
-  val writeConsistency: ConsistencyLevel = ConsistencyLevel.valueOf(config.getString("write-consistency"))
   val port: Int = config.getInt("port")
   val contactPoints = getContactPoints(config.getStringList("contact-points").asScala, port)
   val fetchSize = config.getInt("max-result-size")

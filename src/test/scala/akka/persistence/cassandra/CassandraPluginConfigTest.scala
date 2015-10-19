@@ -107,21 +107,6 @@ class CassandraPluginConfigTest extends WordSpec with MustMatchers {
       }
     }
 
-    "parse config with SimpleStrategy as default for replication-strategy" in {
-      val config = new CassandraPluginConfig(defaultConfig)
-      config.replicationStrategy must be("'SimpleStrategy','replication_factor':1")
-    }
-
-    "parse config with a list of datacenters configured for NetworkTopologyStrategy" in {
-      lazy val configWithNetworkStrategy = ConfigFactory.parseString(
-        """
-          |replication-strategy = "NetworkTopologyStrategy"
-          |data-center-replication-factors = ["dc1:3", "dc2:2"]
-        """.stripMargin).withFallback(defaultConfig)
-      val config = new CassandraPluginConfig(configWithNetworkStrategy)
-      config.replicationStrategy must be("'NetworkTopologyStrategy','dc1':3,'dc2':2")
-    }
-
     "throw an exception for an unknown replication strategy" in {
       intercept[IllegalArgumentException] {
         CassandraPluginConfig.getReplicationStrategy("UnknownStrategy", 0, List.empty)
@@ -156,14 +141,6 @@ class CassandraPluginConfigTest extends WordSpec with MustMatchers {
           CassandraPluginConfig.validateKeyspaceName(tableName)
         }
       }
-    }
-
-
-    "parse keyspace-autocreate parameter" in {
-      val configWithFalseKeyspaceAutocreate = ConfigFactory.parseString( """keyspace-autocreate = false""").withFallback(defaultConfig)
-
-      val config = new CassandraPluginConfig(configWithFalseKeyspaceAutocreate)
-      config.keyspaceAutoCreate must be(false)
     }
   }
 }
