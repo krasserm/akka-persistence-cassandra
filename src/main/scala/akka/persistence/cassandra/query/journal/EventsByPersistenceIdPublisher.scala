@@ -25,6 +25,8 @@ private[journal] object EventsByPersistenceIdPublisher {
 }
 
 // TODO: Decouple database.
+// TODO: Query index tables instead.
+// TODO: Generic message iterator to handle different tables etc.
 private[journal] class EventsByPersistenceIdPublisher(
     persistenceId: String,
     fromSeqNr: Long,
@@ -50,14 +52,8 @@ private[journal] class EventsByPersistenceIdPublisher(
   override protected def query(state: Long, max: Long): Future[Vector[EventEnvelope]] = {
     implicit val ec = context.dispatcher
 
-    // TODO: Fix
-    val boundStatement = preparedSelectMessages.bind(persistenceId, 0l: JLong, state: JLong, state + step: JLong)
-
     // TODO: Async?
-    val resultSet = session.execute(boundStatement)
-
     Future {
-      // TODO: FIX
       val from = state + 1
       val to = Math.min(Math.min(state + step + 1, toSeqNr), state + max + 1)
       val ret = (state to to)

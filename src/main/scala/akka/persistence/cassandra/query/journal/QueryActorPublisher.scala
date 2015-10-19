@@ -10,7 +10,7 @@ import akka.stream.actor.ActorPublisherMessage.{Cancel, Request, SubscriptionTim
 
 //TODO: Optimizations - manage the buffer size efficienly, e.g. based on nr requests, remaining elements etc.
 //TODO: Database timeout, retry and failure handling.
-//TODO: Write actual tests for buffer size, delivery buffer etc.
+//TODO: Write tests for buffer size, delivery buffer etc.
 /**
  * Abstract Query publisher. Can be integrated with Akka Streams as a Source.
  * Intended to be extended by concrete Query publisher classes. This class manages the stream lifecycle,
