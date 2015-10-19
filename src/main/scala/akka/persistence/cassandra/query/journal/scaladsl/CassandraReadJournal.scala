@@ -3,11 +3,12 @@ package akka.persistence.cassandra.query.journal.scaladsl
 import scala.concurrent.duration.FiniteDuration
 
 import akka.actor.ExtendedActorSystem
-import akka.persistence.cassandra.query.journal.{CassandraReadJournalConfig, EventsByPersistenceIdPublisher}
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.stream.scaladsl.Source
 import com.typesafe.config.Config
+
+import akka.persistence.cassandra.query.journal.{CassandraReadJournalConfig, EventsByPersistenceIdPublisher}
 
 object CassandraReadJournal {
   final val Identifier = "cassandra-query-journal"

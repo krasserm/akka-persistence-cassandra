@@ -2,8 +2,9 @@ package akka.persistence.cassandra.query.journal
 
 import scala.concurrent.duration._
 
-import akka.persistence.cassandra.CassandraPluginConfig
 import com.typesafe.config.Config
+
+import akka.persistence.cassandra.CassandraPluginConfig
 
 class CassandraReadJournalConfig(config: Config) extends CassandraPluginConfig(config) {
   val refreshInterval: Option[FiniteDuration] = Some(config.getDuration("refresh-interval", MILLISECONDS).millis)

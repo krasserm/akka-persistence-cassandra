@@ -26,7 +26,7 @@ object CassandraReadJournalSpecBase {
 }
 
 class CassandraReadJournalSpecBase
-  extends TestKit(ActorSystem("EventsByPersistenceIdSpec", ConfigFactory.parseString(CassandraReadJournalSpecBase.config)))
+  extends TestKit(ActorSystem("CassandraReadJournalSpecBase", ConfigFactory.parseString(CassandraReadJournalSpecBase.config)))
   with ImplicitSender
   with WordSpecLike
   with CassandraLifecycle

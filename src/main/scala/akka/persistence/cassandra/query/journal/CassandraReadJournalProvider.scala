@@ -1,7 +1,6 @@
 package akka.persistence.cassandra.query.journal
 
 import akka.actor.ExtendedActorSystem
-import akka.persistence.cassandra.query.journal.scaladsl.CassandraReadJournal
 import akka.persistence.query.ReadJournalProvider
 import com.typesafe.config.Config
 
