@@ -1,24 +1,23 @@
 package akka.persistence.cassandra.journal
 
-import java.lang.{ Long => JLong }
+import java.lang.{ Long ⇒ JLong, Integer ⇒ JInt }
 import java.nio.ByteBuffer
-
 import com.datastax.driver.core.policies.{LoggingRetryPolicy, RetryPolicy}
 import com.datastax.driver.core.policies.RetryPolicy.RetryDecision
-
 import scala.concurrent._
 import scala.collection.immutable.Seq
 import scala.collection.JavaConversions._
 import scala.math.min
 import scala.util.{Success, Failure, Try}
-
 import akka.persistence.journal.AsyncWriteJournal
 import akka.persistence._
 import akka.persistence.cassandra._
 import akka.serialization.SerializationExtension
-
 import com.datastax.driver.core._
 import com.datastax.driver.core.utils.Bytes
+import java.util.Calendar
+import java.util.Date
+import akka.persistence.cassandra.query.Timestamped
 
 class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraStatements {
 
@@ -29,6 +28,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
 
   val cluster = clusterBuilder.build
   val session = cluster.connect()
+  val timeWindow = new TimeWindow(config.timeWindowLength)
 
   case class MessageId(persistenceId: String, sequenceNr: Long)
 
@@ -40,6 +40,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   session.execute(createTable)
   session.execute(createMetatdataTable)
   session.execute(createConfigTable)
+  session.execute(createTimeIndexTable)
 
   val persistentConfig: Map[String, String] = session.execute(selectConfig).all().toList
     .map(row => (row.getString("property"), row.getString("value"))).toMap
@@ -57,13 +58,14 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   val preparedSelectHighestSequenceNr = session.prepare(selectHighestSequenceNr).setConsistencyLevel(readConsistency)
   val preparedSelectDeletedTo = session.prepare(selectDeletedTo).setConsistencyLevel(readConsistency)
   val preparedInsertDeletedTo = session.prepare(insertDeletedTo).setConsistencyLevel(writeConsistency)
+  val preparedWriteTimeIndex = session.prepare(writeMessageTimeIndex).setConsistencyLevel(writeConsistency)
 
   def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     // we need to preserve the order / size of this sequence even though we don't map
     // AtomicWrites 1:1 with a C* insert
     val serialized = messages.map(aw => Try { SerializedAtomicWrite(
         aw.payload.head.persistenceId,
-        aw.payload.map(pr => Serialized(pr.sequenceNr, persistentToByteBuffer(pr))))
+        aw.payload.map(pr => Serialized(pr.sequenceNr, persistentToByteBuffer(pr), pr.payload)))
     })
     val result = serialized.map(a => a.map(_ => ()))
 
@@ -94,9 +96,22 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     // even if we did allow this it would perform terribly as large C* batches are not good
     require(maxPnr - minPnr <= 1, "Do not support AtomicWrites that span 3 partitions. Keep AtomicWrites <= max partition size.")
 
-    val writes: Seq[BoundStatement] = all.map { m =>
+    val eventWrites: Seq[BoundStatement] = all.map { m =>
       preparedWriteMessage.bind(persistenceId, maxPnr: JLong, m.sequenceNr: JLong, m.serialized)
     }
+
+    val indexWrites: Seq[BoundStatement] = all.collect {
+      case Serialized(_, _, event:Timestamped) =>
+        val placement = timeWindow.place(persistenceId, event)
+
+        val cal = Calendar.getInstance
+        cal.setTimeInMillis(placement.windowStart)
+        val year_month_day = cal.get(Calendar.YEAR) * 10000 + cal.get(Calendar.MONTH) * 100 + cal.get(Calendar.DAY_OF_MONTH)
+        preparedWriteTimeIndex.bind(year_month_day: JInt, new Date(placement.windowStart), firstSeq: JLong, persistenceId, minPnr: JLong)
+    }
+
+    val writes = eventWrites ++ indexWrites
+
     // in case we skip an entire partition we want to make sure the empty partition has in in-use flag so scans
     // keep going when they encounter it
     if (partitionNew(firstSeq) && minPnr != maxPnr) writes :+ preparedWriteInUse.bind(persistenceId, minPnr: JLong)
@@ -168,7 +183,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   private case class SerializedAtomicWrite(persistenceId: String, payload: Seq[Serialized])
-  private case class Serialized(sequenceNr: Long, serialized: ByteBuffer)
+  private case class Serialized(sequenceNr: Long, serialized: ByteBuffer, unserializedPayload: Any)
   private case class PartitionInfo(partitionNr: Long, minSequenceNr: Long, maxSequenceNr: Long)
 }
 

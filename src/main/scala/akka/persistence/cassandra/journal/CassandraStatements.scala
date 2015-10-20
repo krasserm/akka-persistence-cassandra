@@ -1,7 +1,7 @@
 package akka.persistence.cassandra.journal
 
 trait CassandraStatements {
-  def config: CassandraJournalConfig
+  val config: CassandraJournalConfig
 
   def createKeyspace = s"""
       CREATE KEYSPACE IF NOT EXISTS ${config.keyspace}
@@ -24,6 +24,17 @@ trait CassandraStatements {
         WITH gc_grace_seconds =${config.gc_grace_seconds}
     """
 
+  def createTimeIndexTable = s"""
+      CREATE TABLE IF NOT EXISTS ${timeIndexTableName} (
+        year_month_day int,
+        window_start timestamp,
+        persistence_id text,
+        first_sequence_nr_in_window bigint,
+        partition_nr bigint,
+
+        primary key (year_month_day, window_start, persistence_id, first_sequence_nr_in_window));
+    """
+
   def createMetatdataTable = s"""
       CREATE TABLE IF NOT EXISTS ${metadataTableName}(
         persistence_id text PRIMARY KEY,
@@ -35,6 +46,11 @@ trait CassandraStatements {
   def writeMessage = s"""
       INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, message, used)
       VALUES (?, ?, ?, ?, true)
+    """
+
+  def writeMessageTimeIndex = s"""
+      INSERT INTO ${timeIndexTableName} (year_month_day, window_start, first_sequence_nr_in_window, persistence_id, partition_nr)
+      VALUES (?, ?, ?, ?, ?)
     """
 
   def deleteMessage = s"""
@@ -88,8 +104,9 @@ trait CassandraStatements {
        INSERT INTO ${tableName} (persistence_id, partition_nr, used)
        VALUES(?, ?, true)
      """
-  
+
   private def tableName = s"${config.keyspace}.${config.table}"
   private def configTableName = s"${config.keyspace}.${config.configTable}"
   private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"
+  private def timeIndexTableName = s"${config.keyspace}.${config.timeIndexTable}"
 }
