@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 
 import akka.persistence._
 import akka.persistence.SnapshotProtocol._
-import akka.persistence.cassandra.CassandraLifecycle
+import akka.persistence.cassandra.{ClusterBuilder, CassandraLifecycle}
 import akka.persistence.snapshot.SnapshotStoreSpec
 import akka.testkit.TestProbe
 
@@ -37,7 +37,7 @@ class CassandraSnapshotStoreSpec extends SnapshotStoreSpec(CassandraSnapshotStor
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    cluster = clusterBuilder.build()
+    cluster = ClusterBuilder.cluster(storeConfig)
     session = cluster.connect()
   }
 

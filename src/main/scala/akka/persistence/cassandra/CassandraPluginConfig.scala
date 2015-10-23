@@ -2,13 +2,12 @@ package akka.persistence.cassandra
 
 import java.net.InetSocketAddress
 
-import com.datastax.driver.core.policies.{TokenAwarePolicy, DCAwareRoundRobinPolicy}
-import com.datastax.driver.core.{QueryOptions, Cluster, ConsistencyLevel, SSLOptions}
+import com.datastax.driver.core.ConsistencyLevel
 import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
 
-class CassandraPluginConfig(config: Config) {
+class CassandraPluginConfig(val config: Config) {
 
   import akka.persistence.cassandra.CassandraPluginConfig._
 
@@ -19,39 +18,6 @@ class CassandraPluginConfig(config: Config) {
   val port: Int = config.getInt("port")
   val contactPoints = getContactPoints(config.getStringList("contact-points").asScala, port)
   val fetchSize = config.getInt("max-result-size")
-
-  val clusterBuilder: Cluster.Builder = Cluster.builder
-    .addContactPointsWithPorts(contactPoints.asJava)
-    .withQueryOptions(new QueryOptions().setFetchSize(fetchSize))
-
-  if (config.hasPath("authentication")) {
-    clusterBuilder.withCredentials(
-      config.getString("authentication.username"),
-      config.getString("authentication.password"))
-  }
-
-  if (config.hasPath("local-datacenter")) {
-    clusterBuilder.withLoadBalancingPolicy(
-      new TokenAwarePolicy(
-        new DCAwareRoundRobinPolicy(config.getString("local-datacenter"))
-      )
-    )
-  }
-
-  if (config.hasPath("ssl")) {
-    val trustStorePath: String = config.getString("ssl.truststore.path")
-    val trustStorePW: String = config.getString("ssl.truststore.password")
-    val keyStorePath: String = config.getString("ssl.keystore.path")
-    val keyStorePW: String = config.getString("ssl.keystore.password")
-    
-    val context = SSLSetup.constructContext(
-      trustStorePath,
-      trustStorePW,
-      keyStorePath,
-      keyStorePW )
-
-    clusterBuilder.withSSL(new SSLOptions(context,SSLOptions.DEFAULT_SSL_CIPHER_SUITES))
-  }
 }
 
 object CassandraPluginConfig {

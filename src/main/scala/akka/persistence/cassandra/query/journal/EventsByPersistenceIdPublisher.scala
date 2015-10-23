@@ -11,7 +11,7 @@ import akka.persistence.PersistentRepr
 import akka.persistence.query.EventEnvelope
 import akka.serialization.SerializationExtension
 import com.datastax.driver.core.utils.Bytes
-import com.datastax.driver.core.{ResultSet, Row}
+import com.datastax.driver.core.{Session, ResultSet, Row}
 
 private[journal] object EventsByPersistenceIdPublisher {
   def props(
@@ -20,8 +20,17 @@ private[journal] object EventsByPersistenceIdPublisher {
       toSeqNr: Long,
       refreshInterval: Option[FiniteDuration],
       maxBufSize: Long,
+      session: Session,
       config: CassandraReadJournalConfig): Props =
-    Props(new EventsByPersistenceIdPublisher(persistenceId, fromSeqNr, toSeqNr, refreshInterval, maxBufSize, config))
+    Props(
+      new EventsByPersistenceIdPublisher(
+        persistenceId,
+        fromSeqNr,
+        toSeqNr,
+        refreshInterval,
+        maxBufSize,
+        session,
+        config))
 }
 
 // TODO: Decouple database.
@@ -33,14 +42,13 @@ private[journal] class EventsByPersistenceIdPublisher(
     toSeqNr: Long,
     refreshInterval: Option[FiniteDuration],
     maxBufSize: Long,
+    session: Session,
     override val config: CassandraReadJournalConfig)
   extends QueryActorPublisher[EventEnvelope, Long](refreshInterval, maxBufSize)
   with CassandraReadStatements {
 
   import config._
 
-  private[this] val cluster = clusterBuilder.build
-  private[this] val session = cluster.connect()
   private[this] val serialization = SerializationExtension(context.system)
 
   private[this] val preparedSelectMessages = session.prepare(selectMessages).setConsistencyLevel(readConsistency)

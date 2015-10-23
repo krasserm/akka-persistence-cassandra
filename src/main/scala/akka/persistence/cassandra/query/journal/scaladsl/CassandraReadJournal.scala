@@ -3,6 +3,7 @@ package akka.persistence.cassandra.query.journal.scaladsl
 import scala.concurrent.duration.FiniteDuration
 
 import akka.actor.ExtendedActorSystem
+import akka.persistence.cassandra.ClusterBuilder
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.stream.scaladsl.Source
@@ -24,6 +25,9 @@ class CassandraReadJournal(system: ExtendedActorSystem, config: Config)
   with CurrentEventsByTagQuery {
 
   val readJournalConfig = new CassandraReadJournalConfig(config)
+
+  val cluster = ClusterBuilder.cluster(readJournalConfig)
+  val session = cluster.connect()
 
   override def allPersistenceIds(): Source[String, Unit] = ???
 
@@ -55,6 +59,7 @@ class CassandraReadJournal(system: ExtendedActorSystem, config: Config)
         toSequenceNr,
         refreshInterval,
         readJournalConfig.maxBufferSize,
+        session,
         readJournalConfig))
       .mapMaterializedValue(_ => ())
       .named(name)
