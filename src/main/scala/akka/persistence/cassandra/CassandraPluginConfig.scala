@@ -23,8 +23,7 @@ class CassandraPluginConfig(val config: Config) {
 object CassandraPluginConfig {
 
   val keyspaceNameRegex = """^("[a-zA-Z]{1}[\w]{0,31}"|[a-zA-Z]{1}[\w]{0,31})$"""
-
-
+  
   /**
    * Builds list of InetSocketAddress out of host:port pairs or host entries + given port parameter.
    */
