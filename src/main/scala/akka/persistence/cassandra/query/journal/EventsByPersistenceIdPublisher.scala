@@ -1,17 +1,19 @@
 package akka.persistence.cassandra.query.journal
 
-import java.nio.ByteBuffer
 import java.lang.{Long => JLong}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
+import com.datastax.driver.core.{Row, ResultSet, Session}
+
 import akka.actor.Props
 import akka.persistence.PersistentRepr
+import akka.persistence.cassandra.JournalFunctions._
+import akka.persistence.cassandra.MessageIterator
 import akka.persistence.query.EventEnvelope
 import akka.serialization.SerializationExtension
-import com.datastax.driver.core.utils.Bytes
-import com.datastax.driver.core.{Session, ResultSet, Row}
 
 private[journal] object EventsByPersistenceIdPublisher {
   def props(
@@ -65,12 +67,40 @@ private[journal] class EventsByPersistenceIdPublisher(
       val from = state
       val to = Math.min(Math.min(state + step, toSeqNr), state + max)
       val ret = (state to to)
-        .zip(new MessageIterator(persistenceId, from, to, maxBufSize).toVector)
+        .zip(
+          new MessageIterator(
+            persistenceId,
+            from,
+            to,
+            targetPartitionSize,
+            maxBufSize,
+            persistentFromByteBuffer(serialization, _),
+            select,
+            inUse,
+            "sequence_nr")
+            .toVector)
         .map(r => toEventEnvelope(r._2, r._1 - 1))
         .toVector
 
       ret
     }
+  }
+
+  private[this] def select(
+      partitionKey: String,
+      currentPnr: Long,
+      fromSnr: Long,
+      toSnr: Long): Iterator[Row] =
+    session.execute(preparedSelectMessages.bind(
+      partitionKey,
+      currentPnr: JLong,
+      fromSnr: JLong,
+      toSnr: JLong)).iterator.asScala
+
+  private[this] def inUse(partitionKey: String, currentPnr: Long): Boolean = {
+    val execute: ResultSet = session.execute(preparedCheckInUse.bind(persistenceId, currentPnr: JLong))
+    if (execute.isExhausted) false
+    else execute.one().getBool("used")
   }
 
   override protected def initialState: Long = Math.max(1, fromSeqNr)
@@ -87,123 +117,4 @@ private[journal] class EventsByPersistenceIdPublisher(
 
   private[this] def toEventEnvelope(persistentRepr: PersistentRepr, offset: Long): EventEnvelope =
     EventEnvelope(offset, persistentRepr.persistenceId, persistentRepr.sequenceNr, persistentRepr.payload)
-
-
-
-
-
-
-
-  // TODO: THE BELOW WAS BLINDLY COPIED FROM CASSANDRAJOURNAL AND RECOVERY
-  // TODO: Decouple and export
-
-  /**
-   * Iterator over messages, crossing partition boundaries.
-   */
-  class MessageIterator(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long) extends Iterator[PersistentRepr] {
-
-    import PersistentRepr.Undefined
-
-    private val initialFromSequenceNr = math.max(highestDeletedSequenceNumber(persistenceId) + 1, fromSequenceNr)
-    log.debug("Starting message scan from {}", initialFromSequenceNr)
-
-    private val iter = new RowIterator(persistenceId, initialFromSequenceNr, toSequenceNr)
-    private var mcnt = 0L
-
-    private var c: PersistentRepr = null
-    private var n: PersistentRepr = PersistentRepr(Undefined)
-
-    fetch()
-
-    def hasNext: Boolean =
-      n != null && mcnt < max
-
-    def next(): PersistentRepr = {
-      fetch()
-      mcnt += 1
-      c
-    }
-
-    /**
-     * Make next message n the current message c, complete c
-     * and pre-fetch new n.
-     */
-    private def fetch(): Unit = {
-      c = n
-      n = null
-      while (iter.hasNext && n == null) {
-        val row = iter.next()
-        val snr = row.getLong("sequence_nr")
-        val m = persistentFromByteBuffer(row.getBytes("message"))
-        // there may be duplicates returned by iter
-        // (on scan boundaries within a partition)
-        if (snr == c.sequenceNr) c = m else n = m
-      }
-    }
-  }
-
-
-  def persistentFromByteBuffer(b: ByteBuffer): PersistentRepr = {
-    serialization.deserialize(Bytes.getArray(b), classOf[PersistentRepr]).get
-  }
-
-  def partitionNr(sequenceNr: Long): Long =
-    (sequenceNr - 1L) / targetPartitionSize
-
-  private def highestDeletedSequenceNumber(persistenceId: String): Long = {
-    Option(session.execute(preparedSelectDeletedTo.bind(persistenceId)).one())
-      .map(_.getLong("deleted_to")).getOrElse(0)
-  }
-
-  /**
-   * Iterates over rows, crossing partition boundaries.
-   */
-  class RowIterator(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long) extends Iterator[Row] {
-    var currentPnr = partitionNr(fromSequenceNr)
-    var currentSnr = fromSequenceNr
-
-    var fromSnr = fromSequenceNr
-    var toSnr = toSequenceNr
-
-    var iter = newIter()
-
-    def newIter() = {
-      session.execute(preparedSelectMessages.bind(persistenceId, currentPnr: JLong, fromSnr: JLong, toSnr: JLong)).iterator
-    }
-
-    def inUse: Boolean = {
-      val execute: ResultSet = session.execute(preparedCheckInUse.bind(persistenceId, currentPnr: JLong))
-      if (execute.isExhausted) false
-      else execute.one().getBool("used")
-    }
-
-    @annotation.tailrec
-    final def hasNext: Boolean = {
-      if (iter.hasNext) {
-        // more entries available in current resultset
-        true
-      } else if (!inUse) {
-        // partition has never been in use so stop
-        false
-      } else {
-        // all entries consumed, try next partition
-        currentPnr += 1
-        fromSnr = currentSnr
-        iter = newIter()
-        hasNext
-      }
-    }
-
-    def next(): Row = {
-      val row = iter.next()
-      currentSnr = row.getLong("sequence_nr")
-      row
-    }
-
-    private def sequenceNrMin(partitionNr: Long): Long =
-      partitionNr * targetPartitionSize + 1L
-
-    private def sequenceNrMax(partitionNr: Long): Long =
-      (partitionNr + 1L) * targetPartitionSize
-  }
 }

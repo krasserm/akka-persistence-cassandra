@@ -1,8 +1,8 @@
 package akka.persistence.cassandra
 
-import com.datastax.driver.core.{Session, Row}
+import com.datastax.driver.core.Row
 
-import JournalFunction._
+import JournalFunctions._
 
 /**
  * Iterates over rows, crossing partition boundaries.
@@ -11,8 +11,7 @@ private class RowIterator(
     partitionKey: String,
     fromSequenceNr: Long,
     toSequenceNr: Long,
-    targetPartitionSize: Long,
-    session: Session,
+    targetPartitionSize: Int,
     select: (String, Long, Long, Long) => Iterator[Row],
     inUse: (String, Long) => Boolean,
     sequenceNumberColumn: String) extends Iterator[Row] {

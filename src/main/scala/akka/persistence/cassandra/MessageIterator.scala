@@ -12,10 +12,9 @@ private class MessageIterator(
     partitionKey: String,
     fromSequenceNr: Long,
     toSequenceNr: Long,
-    targetPartitionSize: Long,
+    targetPartitionSize: Int,
     max: Long,
     persistentFromByteBuffer: ByteBuffer => PersistentRepr,
-    session: Session,
     select: (String, Long, Long, Long) => Iterator[Row],
     inUse: (String, Long) => Boolean,
     sequenceNumberColumn: String) extends Iterator[PersistentRepr] {
@@ -30,7 +29,6 @@ private class MessageIterator(
     initialFromSequenceNr,
     toSequenceNr,
     targetPartitionSize,
-    session,
     select,
     inUse,
     sequenceNumberColumn)

@@ -6,7 +6,7 @@ import scala.concurrent.duration._
 import akka.actor.Actor
 import akka.persistence.PersistentRepr
 
-class StreamMerger extends Actor {
+class StreamMerger(val config: CassandraJournalConfig) extends Actor with CassandraStatements {
 
   private[this] case object Continue
 
@@ -17,6 +17,12 @@ class StreamMerger extends Actor {
 
   override def receive: Receive = {
     case Continue => println("Continue")
+  }
+
+  def merge(progressPointer: Map[String, Long]): Receive = {
+    case Continue => {
+
+    }
   }
 
   def merge(streams: Seq[Iterator[PersistentRepr]]): Seq[PersistentRepr] = {
