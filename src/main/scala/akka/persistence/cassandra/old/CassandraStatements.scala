@@ -1,4 +1,3 @@
-/*
 package akka.persistence.cassandra.old
 
 import akka.persistence.cassandra.journal.CassandraJournalConfig
@@ -96,4 +95,3 @@ trait CassandraStatements {
   private def configTableName = s"${config.keyspace}.${config.configTable}"
   private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"
 }
-*/

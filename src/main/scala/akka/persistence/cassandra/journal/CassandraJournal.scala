@@ -9,6 +9,9 @@ import scala.collection.immutable.Seq
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 
+import akka.actor.Props
+import akka.cluster.singleton.{ClusterSingletonManagerSettings, ClusterSingletonManager}
+import akka.cluster.singleton.ClusterSingletonManager.Internal.End
 import akka.persistence._
 import akka.persistence.cassandra._
 import akka.persistence.journal.AsyncWriteJournal
@@ -36,6 +39,12 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
 
   val cluster = ClusterBuilder.cluster(config)
   val session = cluster.connect()
+
+  val merger = context.system.actorOf(ClusterSingletonManager.props(
+    singletonProps = Props(new StreamMerger()),
+    terminationMessage = End,
+    settings = ClusterSingletonManagerSettings(context.system)),
+    name = "streamMerger")
 
   case class MessageId(persistenceId: String, sequenceNr: Long)
 

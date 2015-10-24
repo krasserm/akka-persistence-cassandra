@@ -1,4 +1,3 @@
-/*
 package akka.persistence.cassandra.old
 
 import java.lang.{Long => JLong}
@@ -159,4 +158,3 @@ trait CassandraRecovery extends ActorLogging {
       (partitionNr + 1L) * targetPartitionSize
   }
 }
-*/
