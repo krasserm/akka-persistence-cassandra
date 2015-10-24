@@ -2,6 +2,7 @@ package akka.persistence.cassandra.journal
 
 import java.lang.{Long => JLong}
 
+import scala.Option
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
@@ -22,6 +23,8 @@ object StreamMerger {
   type Progress[T] = Map[T, Long]
 }
 
+// TODO: Are sequenceNrs for a given persistenceId within one physical stream ordered?
+// TODO: If not we will need to add a buffer larger than 1 element.
 class StreamMerger(
     val config: CassandraJournalConfig,
     session: Session) extends Actor with CassandraStatements {
@@ -62,24 +65,38 @@ class StreamMerger(
         .map(journalId => (JournalId(journalId), journalIdProgress.getOrElse(JournalId(journalId), 0l)))
         .toMap
 
-      val independentStreams = updatedProgress.map{ journalProgress =>
-        new MessageIterator(
-          journalProgress._1.id,
-          journalProgress._2,
-          journalProgress._2 + step,
-          targetPartitionSize,
-          Long.MaxValue,
-          persistentFromByteBuffer(serialization, _),
-          select,
-          inUse,
-          "journal_sequence_nr")
+      val independentStreams =
+        updatedProgress
+          .map{ journalProgress =>
+            Stream(
+              journalProgress._1,
+              new MessageIterator(
+                journalProgress._1.id,
+                journalProgress._2,
+                journalProgress._2 + step,
+                targetPartitionSize,
+                Long.MaxValue,
+                persistentFromByteBuffer(serialization, _),
+                select,
+                inUse,
+                "journal_sequence_nr"))
+          }
+          .toSeq
+
+      val mergeResult =
+        merge(MergeState(updatedProgress, persistenceIdProgress, independentStreams, 0, Seq(), Set()))
+
+      val nextState =
+      mergeResult match {
+        case None =>
+          // TODO: Fetch more next time.
+          merging(journalIdProgress, persistenceIdProgress)
+        case Some((newJournalIdProgress, newPersistenceIdProgress, mergedStream)) =>
+          println(mergedStream)
+          merging(newJournalIdProgress, newPersistenceIdProgress)
       }
 
-      val (newJournalIdProgress, newPersistenceIdProgress, mergedStream) =
-        merge(updatedProgress, persistenceIdProgress, independentStreams, Seq(), Seq())
-
-      println(mergedStream)
-      context.become(merging(newJournalIdProgress, newPersistenceIdProgress))
+      context.become(nextState)
   }
 
   private[this] def select(
@@ -108,16 +125,82 @@ class StreamMerger(
   private[this] def journalIds(): Seq[String] =
     session.execute(preparedSelectDistinctJournalId.bind()).all().asScala.map(_.getString("journal_id"))
 
+  case class Stream(journalId: JournalId, elements: Iterator[PersistentRepr])
+
+  case class MergeState(
+    journalIdProgress: Progress[JournalId],
+    persistenceIdProgress: Progress[PersistenceId],
+    independentStreams: Seq[Stream],
+    independentStreamPointer: Int,
+    mergedStream: Seq[PersistentRepr],
+    buffer: Set[PersistentRepr])
+
   @tailrec
   private[this] def merge(
-      journalIdProgress: Progress[JournalId],
-      persistenceIdProgress: Progress[PersistenceId],
-      independentStreams: Iterable[Iterator[PersistentRepr]],
-      buffer: Seq[PersistentRepr],
-      mergedStream: Seq[PersistentRepr]
-    ): (Progress[JournalId], Progress[PersistenceId], Seq[PersistentRepr]) = {
+      state: MergeState): Option[(Progress[JournalId], Progress[PersistenceId], Seq[PersistentRepr])] = {
 
+    import state._
 
-    merge(journalIdProgress, persistenceIdProgress, independentStreams, Seq(), Seq())
+    def allEmpty(independentStreams: Seq[Stream]) =
+      !independentStreams.exists(_.elements.hasNext)
+
+    if(allEmpty(independentStreams))
+      return Some((journalIdProgress, persistenceIdProgress, mergedStream))
+
+    merge(mergeInternal(state))
   }
+
+  private[this] def mergeInternal(state: MergeState): MergeState = {
+    import state._
+
+    if(buffer.exists(isExpectedSequenceNr(_, persistenceIdProgress))) {
+      val head = buffer.find(isExpectedSequenceNr(_, persistenceIdProgress)).get
+      val persistenceId = PersistenceId(head.persistenceId)
+      val newPersistenceIdProgress = persistenceIdProgress
+        .updated(persistenceId, persistenceIdProgress.getOrElse(persistenceId, 0l) + 1l)
+
+      MergeState(
+        journalIdProgress,
+        newPersistenceIdProgress,
+        independentStreams,
+        independentStreamPointer,
+        mergedStream :+ head,
+        buffer - head)
+    } else if (state.independentStreams(independentStreamPointer).elements.hasNext) {
+      val stream = independentStreams(independentStreamPointer)
+      val head = stream.elements.next()
+      val newIndependentStreamPointer = independentStreamPointer + 1 % independentStreams.size
+      val newJournalIdProgress = journalIdProgress
+        .updated(stream.journalId, journalIdProgress.getOrElse(stream.journalId, 0l) + 1l)
+
+      if(isExpectedSequenceNr(head, persistenceIdProgress)) {
+        val persistenceId = PersistenceId(head.persistenceId)
+        val newPersistenceIdProgress = persistenceIdProgress
+          .updated(persistenceId, persistenceIdProgress.getOrElse(persistenceId, 0l) + 1l)
+
+        MergeState(
+          newJournalIdProgress,
+          newPersistenceIdProgress,
+          independentStreams,
+          newIndependentStreamPointer,
+          mergedStream :+ head,
+          buffer)
+      } else {
+        MergeState(
+          newJournalIdProgress,
+          persistenceIdProgress,
+          independentStreams,
+          newIndependentStreamPointer,
+          mergedStream,
+          buffer + head)
+      }
+    } else {
+      // TODO: Ensure we don't get stuck in a loop here.
+      state
+    }
+  }
+
+  // TODO: Handle situation when new persistenceId is encountered, but its sequenceNr is not 0
+  private[this] def isExpectedSequenceNr(event: PersistentRepr, persistenceIdProgress: Progress[PersistenceId]) =
+    persistenceIdProgress.getOrElse(PersistenceId(event.persistenceId), event.sequenceNr) == event.sequenceNr
 }
