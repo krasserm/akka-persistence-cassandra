@@ -14,7 +14,6 @@ trait CassandraStatements {
         property text primary key, value text)
      """
 
-  // TODO: Fix cluster columns based on deletes/query requirements
   def createTable = s"""
       CREATE TABLE IF NOT EXISTS ${tableName} (
         used boolean static,
@@ -24,7 +23,7 @@ trait CassandraStatements {
         persistence_id text,
         sequence_nr bigint,
         message blob,
-        PRIMARY KEY ((journal_id, partition_nr), journal_sequence_nr, persistence_id, sequence_nr))
+        PRIMARY KEY ((journal_id, partition_nr), journal_sequence_nr))
         WITH gc_grace_seconds =${config.gc_grace_seconds}
     """
 

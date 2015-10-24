@@ -2,6 +2,7 @@ package akka.persistence.cassandra.journal
 
 import java.lang.{Long => JLong}
 import java.nio.ByteBuffer
+import java.util.UUID
 
 import scala.collection.JavaConversions._
 import scala.collection.immutable.Seq
@@ -20,11 +21,11 @@ import com.datastax.driver.core.utils.Bytes
 class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraStatements {
 
   // TODO: journalId management.
-  // TODO: Cluster membership can change and new Journal instances may be added and old removed.
+  // TODO: Uniqueness in distributed environment. Coordination/coordination-less generation?
+  // TODO: Cluster membership change, Journal instances added and removed.
   // TODO: We need to ensure globally unique journalId. Conflicts would violate the single writer requirement.
   // TODO: Garbage collecting or infinitely growing journalId set?
-  private[this] val journalId = context.self.path.toString
-  println(journalId)
+  private[this] val journalId = UUID.randomUUID.toString
 
   private[this] var journalSequenceNr = 0L
 

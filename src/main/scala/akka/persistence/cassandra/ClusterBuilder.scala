@@ -7,7 +7,7 @@ import scala.collection.JavaConverters._
 
 object ClusterBuilder {
 
-  def cluster(cassandraPluginConfig: CassandraPluginConfig) = {
+  def cluster(cassandraPluginConfig: CassandraPluginConfig): Cluster = {
     import cassandraPluginConfig._
 
     val clusterBuilder: Cluster.Builder = Cluster.builder
