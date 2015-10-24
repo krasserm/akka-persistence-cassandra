@@ -120,8 +120,9 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   // TODO: FIX
   override def asyncReadHighestSequenceNr(
     persistenceId: String,
-    fromSequenceNr: Long): Future[Long] = Future(1l)
+    fromSequenceNr: Long): Future[Long] = Future(0l)
 
+  // TODO: FIX
   override def asyncReplayMessages(
     persistenceId: String,
     fromSequenceNr: Long,
