@@ -3,8 +3,6 @@ package akka.persistence.cassandra.snapshot
 import java.lang.{ Long => JLong }
 import java.nio.ByteBuffer
 
-import akka.persistence.snapshot.SnapshotStore
-
 import scala.collection.immutable
 import scala.concurrent.Future
 
@@ -12,6 +10,7 @@ import akka.actor._
 import akka.persistence._
 import akka.persistence.cassandra._
 import akka.persistence.serialization.Snapshot
+import akka.persistence.snapshot.SnapshotStore
 import akka.serialization.SerializationExtension
 
 import com.datastax.driver.core._
@@ -24,7 +23,7 @@ class CassandraSnapshotStore extends SnapshotStore with CassandraStatements with
   import context.dispatcher
   import config._
 
-  val cluster = clusterBuilder.build
+  val cluster = ClusterBuilder.cluster(config)
   val session = cluster.connect()
 
   if (config.keyspaceAutoCreate) {
