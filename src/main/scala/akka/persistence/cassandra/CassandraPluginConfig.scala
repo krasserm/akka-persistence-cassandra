@@ -2,76 +2,28 @@ package akka.persistence.cassandra
 
 import java.net.InetSocketAddress
 
-import com.datastax.driver.core.policies.{TokenAwarePolicy, DCAwareRoundRobinPolicy}
-import com.datastax.driver.core.{QueryOptions, Cluster, ConsistencyLevel, SSLOptions}
+import com.datastax.driver.core.ConsistencyLevel
 import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
 
-
-class CassandraPluginConfig(config: Config) {
+class CassandraPluginConfig(val config: Config) {
 
   import akka.persistence.cassandra.CassandraPluginConfig._
 
   val keyspace: String = config.getString("keyspace")
   val table: String = config.getString("table")
   val metadataTable: String = config.getString("metadata-table")
-
-  val configTable: String = validateTableName(config.getString("config-table"))
-
-  val keyspaceAutoCreate: Boolean = config.getBoolean("keyspace-autocreate")
-  val keyspaceAutoCreateRetries: Int = config.getInt("keyspace-autocreate-retries")
-
-  val replicationStrategy: String = getReplicationStrategy(
-    config.getString("replication-strategy"),
-    config.getInt("replication-factor"),
-    config.getStringList("data-center-replication-factors").asScala)
-
   val readConsistency: ConsistencyLevel = ConsistencyLevel.valueOf(config.getString("read-consistency"))
-  val writeConsistency: ConsistencyLevel = ConsistencyLevel.valueOf(config.getString("write-consistency"))
   val port: Int = config.getInt("port")
   val contactPoints = getContactPoints(config.getStringList("contact-points").asScala, port)
   val fetchSize = config.getInt("max-result-size")
-
-  val clusterBuilder: Cluster.Builder = Cluster.builder
-    .addContactPointsWithPorts(contactPoints.asJava)
-    .withQueryOptions(new QueryOptions().setFetchSize(fetchSize))
-
-  if (config.hasPath("authentication")) {
-    clusterBuilder.withCredentials(
-      config.getString("authentication.username"),
-      config.getString("authentication.password"))
-  }
-
-  if (config.hasPath("local-datacenter")) {
-    clusterBuilder.withLoadBalancingPolicy(
-      new TokenAwarePolicy(
-        new DCAwareRoundRobinPolicy(config.getString("local-datacenter"))
-      )
-    )
-  }
-
-  if (config.hasPath("ssl")) {
-    val trustStorePath: String = config.getString("ssl.truststore.path")
-    val trustStorePW: String = config.getString("ssl.truststore.password")
-    val keyStorePath: String = config.getString("ssl.keystore.path")
-    val keyStorePW: String = config.getString("ssl.keystore.password")
-    
-    val context = SSLSetup.constructContext(
-      trustStorePath,
-      trustStorePW,
-      keyStorePath,
-      keyStorePW )
-
-    clusterBuilder.withSSL(new SSLOptions(context,SSLOptions.DEFAULT_SSL_CIPHER_SUITES))
-  }
 }
 
 object CassandraPluginConfig {
 
   val keyspaceNameRegex = """^("[a-zA-Z]{1}[\w]{0,31}"|[a-zA-Z]{1}[\w]{0,31})$"""
-
-
+  
   /**
    * Builds list of InetSocketAddress out of host:port pairs or host entries + given port parameter.
    */
