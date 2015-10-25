@@ -6,6 +6,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
+import akka.persistence.PersistentRepr._
 import com.datastax.driver.core.{Row, ResultSet, Session}
 
 import akka.actor.Props
@@ -68,13 +69,15 @@ private[journal] class EventsByPersistenceIdPublisher(
       val to = Math.min(Math.min(state + step, toSeqNr), state + max)
       val ret = (state to to)
         .zip(
-          new MessageIterator(
+          new MessageIterator[PersistentRepr](
             persistenceId,
             from,
             to,
             targetPartitionSize,
             maxBufSize,
-            persistentFromByteBuffer(serialization, _),
+            row => persistentFromByteBuffer(serialization, row.getBytes("message")),
+            PersistentRepr(Undefined),
+            _.sequenceNr,
             select,
             inUse,
             "sequence_nr")

@@ -55,7 +55,7 @@ trait CassandraStatements {
    """
 
   def selectDistinctJournalId = s"""
-      SELECT DISTINCT journal_id FROM ${tableName}
+      SELECT DISTINCT journal_id, partition_nr FROM ${tableName}
     """
 
   def selectConfig = s"""

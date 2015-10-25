@@ -40,11 +40,6 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   val cluster = ClusterBuilder.cluster(config)
   val session = cluster.connect()
 
-  val merger = context.system.actorOf(ClusterSingletonManager.props(
-    singletonProps = Props(new StreamMerger(config, session)),
-    terminationMessage = End,
-    settings = ClusterSingletonManagerSettings(context.system)),
-    name = "streamMerger")
 
   case class MessageId(persistenceId: String, sequenceNr: Long)
 
@@ -64,6 +59,15 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     require(oldValue.toInt == config.targetPartitionSize, "Can't change target-partition-size"))
 
   session.execute(writeConfig, CassandraJournalConfig.TargetPartitionProperty, config.targetPartitionSize.toString)
+
+  println("STARTING SINGLETON")
+  val merger = context.system.actorOf(Props(new StreamMerger(config, session)))
+  /*val merger = context.system.actorOf(ClusterSingletonManager.props(
+    singletonProps = Props(new StreamMerger(config, session)),
+    terminationMessage = End,
+    settings = ClusterSingletonManagerSettings(context.system)),
+    name = "streamMerger")*/
+  println("STARTING SINGLETON END")
 
   val preparedWriteMessage = session.prepare(writeMessage)
   val preparedWriteInUse = session.prepare(writeInUse)

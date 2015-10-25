@@ -3,21 +3,23 @@ package akka.persistence.cassandra
 import java.nio.ByteBuffer
 
 import akka.persistence.PersistentRepr
-import com.datastax.driver.core.{Row, Session}
+import com.datastax.driver.core.Row
 
 /**
  * Iterator over messages, crossing partition boundaries.
  */
-private class MessageIterator(
+private class MessageIterator[T >: Null](
     partitionKey: String,
     fromSequenceNr: Long,
     toSequenceNr: Long,
     targetPartitionSize: Int,
     max: Long,
-    persistentFromByteBuffer: ByteBuffer => PersistentRepr,
+    extractor: Row => T,
+    default: T,
+    sequenceNumber: T => Long,
     select: (String, Long, Long, Long) => Iterator[Row],
     inUse: (String, Long) => Boolean,
-    sequenceNumberColumn: String) extends Iterator[PersistentRepr] {
+    sequenceNumberColumn: String) extends Iterator[T] {
 
   import akka.persistence.PersistentRepr.Undefined
 
@@ -35,15 +37,16 @@ private class MessageIterator(
 
   private var mcnt = 0L
 
-  private var c: PersistentRepr = null
-  private var n: PersistentRepr = PersistentRepr(Undefined)
+  private var c: T = null
+  // TODO: FIX
+  private var n: T = default
 
   fetch()
 
   def hasNext: Boolean =
     n != null && mcnt < max
 
-  def next(): PersistentRepr = {
+  def next(): T = {
     fetch()
     mcnt += 1
     c
@@ -58,11 +61,11 @@ private class MessageIterator(
     n = null
     while (iter.hasNext && n == null) {
       val row = iter.next()
-      val snr = row.getLong("sequence_nr")
-      val m = persistentFromByteBuffer(row.getBytes("message"))
+      val snr = row.getLong(sequenceNumberColumn)
+      val m = extractor(row)
       // there may be duplicates returned by iter
       // (on scan boundaries within a partition)
-      if (snr == c.sequenceNr) c = m else n = m
+      if (snr == sequenceNumber(c)) c = m else n = m
     }
   }
 
