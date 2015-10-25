@@ -9,7 +9,7 @@ import scala.collection.immutable.Seq
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 
-import akka.actor.Props
+import akka.cluster.Cluster
 import akka.cluster.singleton.{ClusterSingletonManagerSettings, ClusterSingletonManager}
 import akka.cluster.singleton.ClusterSingletonManager.Internal.End
 import akka.persistence._
@@ -60,14 +60,14 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
 
   session.execute(writeConfig, CassandraJournalConfig.TargetPartitionProperty, config.targetPartitionSize.toString)
 
-  println("STARTING SINGLETON")
-  val merger = context.system.actorOf(Props(new StreamMerger(config, session)))
-  /*val merger = context.system.actorOf(ClusterSingletonManager.props(
-    singletonProps = Props(new StreamMerger(config, session)),
-    terminationMessage = End,
-    settings = ClusterSingletonManagerSettings(context.system)),
-    name = "streamMerger")*/
-  println("STARTING SINGLETON END")
+  // TODO: Figure out how to sensibly run the merging process.
+  Cluster(context.system).join(Cluster(context.system).selfAddress)
+
+  val merger = context.system.actorOf(ClusterSingletonManager.props(
+    StreamMerger.props(config, session),
+    End,
+    ClusterSingletonManagerSettings(context.system)),
+    "streamMerger")
 
   val preparedWriteMessage = session.prepare(writeMessage)
   val preparedWriteInUse = session.prepare(writeInUse)

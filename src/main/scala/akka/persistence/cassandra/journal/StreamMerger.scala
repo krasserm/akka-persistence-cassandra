@@ -8,13 +8,17 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
 
-import akka.actor.Actor
+import akka.actor.{Props, Actor}
 import akka.persistence.cassandra.MessageIterator
 import akka.persistence.cassandra.journal.StreamMerger._
 import akka.serialization.SerializationExtension
 import com.datastax.driver.core.{ResultSet, Row, Session}
 
 object StreamMerger {
+
+  def props(config: CassandraJournalConfig, session: Session): Props =
+    Props(new StreamMerger(config, session))
+
   case class JournalEntry(
     journalId: JournalId,
     journalSequenceNr: Long,
@@ -74,55 +78,44 @@ object StreamMerger {
   private[this] def mergeInternal(state: MergeState): MergeState = {
     import state._
 
+    def incrementPointer: Int = (independentStreamPointer + 1) % independentStreams.size
+
+    def newPersistenceIdProgress(entry: JournalEntry): Progress[PersistenceId] =
+      persistenceIdProgress
+        .updated(
+          entry.persistenceId,
+          persistenceIdProgress.getOrElse(entry.persistenceId, entry.sequenceNr - 1) + 1l)
+
+    def newJournalIdProgress(entry: JournalEntry): Progress[JournalId] =
+      journalIdProgress
+        .updated(
+          entry.journalId,
+          journalIdProgress.getOrElse(entry.journalId, entry.journalSequenceNr - 1) + 1l)
+
     if(buffer.exists(isExpectedSequenceNr(_, persistenceIdProgress))) {
       val head = buffer.find(isExpectedSequenceNr(_, persistenceIdProgress)).get
-      val persistenceId = head.persistenceId
-      val newPersistenceIdProgress = persistenceIdProgress
-        .updated(persistenceId, persistenceIdProgress.getOrElse(persistenceId, head.sequenceNr - 1) + 1l)
-      val newJournalIdProgress = journalIdProgress
-        .updated(head.journalId, journalIdProgress.getOrElse(head.journalId, head.journalSequenceNr - 1) + 1l)
-      MergeState(
-        newJournalIdProgress,
-        newPersistenceIdProgress,
-        independentStreams,
-        independentStreamPointer,
-        mergedStream :+ head,
-        buffer - head,
-        0)
+
+      state.copy(
+        journalIdProgress = newJournalIdProgress(head),
+        persistenceIdProgress = newPersistenceIdProgress(head),
+        mergedStream = mergedStream :+ head,
+        buffer = buffer - head,
+        noActionCounter = 0)
     } else if (independentStreams(independentStreamPointer).elements.hasNext) {
-      val stream = independentStreams(independentStreamPointer)
-      val head = stream.elements.next()
-      val newIndependentStreamPointer = (independentStreamPointer + 1) % independentStreams.size
+      val head = independentStreams(independentStreamPointer).elements.next()
 
       if(isExpectedSequenceNr(head, persistenceIdProgress)) {
-        val persistenceId = head.persistenceId
-        val newJournalIdProgress = journalIdProgress
-          .updated(head.journalId, journalIdProgress.getOrElse(head.journalId, head.journalSequenceNr - 1) + 1l)
-        val newPersistenceIdProgress = persistenceIdProgress
-          .updated(persistenceId, persistenceIdProgress.getOrElse(persistenceId, head.sequenceNr -1l) + 1l)
-
-        MergeState(
-          newJournalIdProgress,
-          newPersistenceIdProgress,
-          independentStreams,
-          newIndependentStreamPointer,
-          mergedStream :+ head,
-          buffer,
-          0)
+        state.copy(
+          journalIdProgress = newJournalIdProgress(head),
+          persistenceIdProgress = newPersistenceIdProgress(head),
+          independentStreamPointer = incrementPointer,
+          mergedStream = mergedStream :+ head,
+          noActionCounter = 0)
       } else {
-        MergeState(
-          journalIdProgress,
-          persistenceIdProgress,
-          independentStreams,
-          newIndependentStreamPointer,
-          mergedStream,
-          buffer + head,
-          0)
+        state.copy(independentStreamPointer = incrementPointer, buffer = buffer + head, noActionCounter = 0)
       }
     } else {
-      // TODO: Ensure we don't get stuck in a loop here.
-      val newIndependentStreamPointer = (independentStreamPointer + 1) % independentStreams.size
-      state.copy(independentStreamPointer = newIndependentStreamPointer, noActionCounter = noActionCounter + 1)
+      state.copy(independentStreamPointer = incrementPointer, noActionCounter = noActionCounter + 1)
     }
   }
 
@@ -162,14 +155,11 @@ class StreamMerger(
     val config: CassandraJournalConfig,
     session: Session) extends Actor with CassandraStatements {
 
-  println("STARTED SINGLETON")
-
   import config._
 
   val serialization = SerializationExtension(context.system)
 
   private[this] val refreshInterval = FiniteDuration(1, SECONDS)
-  private[this] val step = 50l
 
   private[this] val tickTask =
     context.system.scheduler.schedule(refreshInterval, refreshInterval, self, Continue)(context.dispatcher)
@@ -186,11 +176,12 @@ class StreamMerger(
   private[this] val preparedCheckInUse=
     session.prepare(selectInUse).setConsistencyLevel(readConsistency)
 
-  override def receive: Receive = merging(initialJournalIdProgress, initialPersistenceIdProgress)
+  override def receive: Receive = merging(initialJournalIdProgress, initialPersistenceIdProgress, 50l)
 
   private[this] def merging(
       journalIdProgress: Progress[JournalId],
-      persistenceIdProgress: Progress[PersistenceId]): Receive = {
+      persistenceIdProgress: Progress[PersistenceId],
+      step: Long): Receive = {
 
     case Continue =>
       println("CONTINUE")
@@ -225,10 +216,9 @@ class StreamMerger(
       val nextState =
       mergeResult match {
         case None =>
-          // TODO: Fetch more next time.
-          merging(journalIdProgress, persistenceIdProgress)
+          merging(journalIdProgress, persistenceIdProgress, step + 50l)
         case Some((newJournalIdProgress, newPersistenceIdProgress, mergedStream)) =>
-          merging(newJournalIdProgress, newPersistenceIdProgress)
+          merging(newJournalIdProgress, newPersistenceIdProgress, step)
       }
 
       context.become(nextState)
