@@ -61,7 +61,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   session.execute(writeConfig, CassandraJournalConfig.TargetPartitionProperty, config.targetPartitionSize.toString)
 
   // TODO: Figure out how to sensibly run the merging process.
-  Cluster(context.system).join(Cluster(context.system).selfAddress)
+    Cluster(context.system).join(Cluster(context.system).selfAddress)
 
   val merger = context.system.actorOf(ClusterSingletonManager.props(
     StreamMerger.props(config, session),

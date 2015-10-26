@@ -81,16 +81,11 @@ object StreamMerger {
     def incrementPointer: Int = (independentStreamPointer + 1) % independentStreams.size
 
     def newPersistenceIdProgress(entry: JournalEntry): Progress[PersistenceId] =
-      persistenceIdProgress
-        .updated(
-          entry.persistenceId,
-          persistenceIdProgress.getOrElse(entry.persistenceId, entry.sequenceNr - 1) + 1l)
+      persistenceIdProgress + (entry.persistenceId -> entry.sequenceNr)
 
     def newJournalIdProgress(entry: JournalEntry): Progress[JournalId] =
-      journalIdProgress
-        .updated(
-          entry.journalId,
-          journalIdProgress.getOrElse(entry.journalId, entry.journalSequenceNr - 1) + 1l)
+      journalIdProgress +
+        (entry.journalId -> (journalIdProgress.getOrElse(entry.journalId, -1l) + 1))
 
     if(buffer.exists(isExpectedSequenceNr(_, persistenceIdProgress))) {
       val head = buffer.find(isExpectedSequenceNr(_, persistenceIdProgress)).get
@@ -121,8 +116,10 @@ object StreamMerger {
 
   // TODO: Handle situation when new persistenceId is encountered, but its sequenceNr is not 0
   // TODO: Represent progress for not known persistenceIds properly across merger.
-  private[this] def isExpectedSequenceNr(event: JournalEntry, persistenceIdProgress: Progress[PersistenceId]) =
-    persistenceIdProgress.getOrElse(event.persistenceId, event.sequenceNr - 1) + 1 == event.sequenceNr
+  private[this] def isExpectedSequenceNr(
+      event: JournalEntry,
+      persistenceIdProgress: Progress[PersistenceId]) =
+    persistenceIdProgress.getOrElse(event.persistenceId, 0l) + 1 == event.sequenceNr
 }
 
 /**
@@ -184,28 +181,28 @@ class StreamMerger(
       step: Long): Receive = {
 
     case Continue =>
-      println("CONTINUE")
       val currentJournalIds = journalIds()
       val updatedProgress = currentJournalIds
-        .map(journalId => (JournalId(journalId), journalIdProgress.getOrElse(JournalId(journalId), 0l)))
+        .map(journalId => (JournalId(journalId), journalIdProgress.getOrElse(JournalId(journalId), -1l)))
         .toMap
 
       val independentStreams =
         updatedProgress
-          .map{ journalProgress =>
+          .map{ progress =>
             Stream(
-              journalProgress._1,
+              progress._1,
               new MessageIterator[JournalEntry](
-                journalProgress._1.id,
-                journalProgress._2,
-                journalProgress._2 + step,
+                progress._1.id,
+                progress._2 + 1,
+                progress._2 + step + 1,
                 targetPartitionSize,
                 Long.MaxValue,
                 extractor,
-                JournalEntry(JournalId(""), 0l, PersistenceId(""), 0, null),
+                JournalEntry(JournalId(""), -1l, PersistenceId(""), 0, null),
                 _.journalSequenceNr,
                 select,
                 inUse,
+                highestDeletedSequenceNumber,
                 "journal_sequence_nr"))
           }
           .toSeq
@@ -242,6 +239,8 @@ class StreamMerger(
       currentPnr: JLong,
       fromSnr: JLong,
       toSnr: JLong)).iterator.asScala
+
+  private[this] def highestDeletedSequenceNumber(parititonKey: String): Long = -1l
 
   private[this] def inUse(partitionKey: String, currentPnr: Long): Boolean = {
     val execute: ResultSet = session.execute(preparedCheckInUse.bind(partitionKey, currentPnr: JLong))

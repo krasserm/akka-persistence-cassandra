@@ -19,6 +19,7 @@ private class MessageIterator[T >: Null](
     sequenceNumber: T => Long,
     select: (String, Long, Long, Long) => Iterator[Row],
     inUse: (String, Long) => Boolean,
+    highestDeletedSequenceNumber: String => Long,
     sequenceNumberColumn: String) extends Iterator[T] {
 
   import akka.persistence.PersistentRepr.Undefined
@@ -68,7 +69,4 @@ private class MessageIterator[T >: Null](
       if (snr == sequenceNumber(c)) c = m else n = m
     }
   }
-
-  // TODO: FIX
-  private def highestDeletedSequenceNumber(persistenceId: String): Long = 0
 }

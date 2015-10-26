@@ -80,6 +80,7 @@ private[journal] class EventsByPersistenceIdPublisher(
             _.sequenceNr,
             select,
             inUse,
+            highestDeletedSequenceNumber,
             "sequence_nr")
             .toVector)
         .map(r => toEventEnvelope(r._2, r._1 - 1))
@@ -105,6 +106,8 @@ private[journal] class EventsByPersistenceIdPublisher(
     if (execute.isExhausted) false
     else execute.one().getBool("used")
   }
+
+  private[this] def highestDeletedSequenceNumber(parititonKey: String): Long = 0l
 
   override protected def initialState: Long = Math.max(1, fromSeqNr)
 
