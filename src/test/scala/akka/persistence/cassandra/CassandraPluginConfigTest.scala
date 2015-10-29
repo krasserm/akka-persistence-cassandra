@@ -29,6 +29,8 @@ class CassandraPluginConfigTest extends WordSpec with MustMatchers {
       |port = 9142
       |max-result-size = 50
       |delete-retries = 4
+      |log-slow-query = false
+      |slow-query-time = 2s
     """.stripMargin)
 
 

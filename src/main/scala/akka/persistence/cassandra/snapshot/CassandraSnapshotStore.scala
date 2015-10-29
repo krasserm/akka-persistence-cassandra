@@ -25,6 +25,9 @@ class CassandraSnapshotStore extends SnapshotStore with CassandraStatements with
   import config._
 
   val cluster = clusterBuilder.build
+  if (logSlowQuery) {
+    cluster.register(QueryLogger.builder(cluster).withConstantThreshold(slowQueryTime).build())
+  }
   val session = cluster.connect()
 
   if (config.keyspaceAutoCreate) {
