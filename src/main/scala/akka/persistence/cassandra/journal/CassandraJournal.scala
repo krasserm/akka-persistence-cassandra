@@ -64,7 +64,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     Cluster(context.system).join(Cluster(context.system).selfAddress)
 
   val merger = context.system.actorOf(ClusterSingletonManager.props(
-    StreamMerger.props(config, session),
+    StreamMergerActor.props(config, session),
     End,
     ClusterSingletonManagerSettings(context.system)),
     "streamMerger")

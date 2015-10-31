@@ -1,28 +1,24 @@
 package akka.persistence.cassandra
 
-import java.nio.ByteBuffer
-
-import akka.persistence.PersistentRepr
 import com.datastax.driver.core.Row
 
 /**
  * Iterator over messages, crossing partition boundaries.
  */
-private class MessageIterator[T >: Null](
+abstract class MessageIterator[T >: Null](
     partitionKey: String,
     fromSequenceNr: Long,
     toSequenceNr: Long,
     targetPartitionSize: Int,
-    max: Long,
-    extractor: Row => T,
-    default: T,
-    sequenceNumber: T => Long,
-    select: (String, Long, Long, Long) => Iterator[Row],
-    inUse: (String, Long) => Boolean,
-    highestDeletedSequenceNumber: String => Long,
-    sequenceNumberColumn: String) extends Iterator[T] {
+    max: Long) extends Iterator[T] {
 
-  import akka.persistence.PersistentRepr.Undefined
+  protected def extractor(row: Row): T
+  protected def default: T
+  protected def sequenceNumber(element: T): Long
+  protected def select(partitionKey: String, currentPnr: Long, fromSnr: Long, toSnr: Long): Iterator[Row]
+  protected def inUse(partitionKey: String, currentPnr: Long): Boolean
+  protected def highestDeletedSequenceNumber(partitionKey: String): Long
+  protected def sequenceNumberColumn: String
 
   private val initialFromSequenceNr = math.max(highestDeletedSequenceNumber(partitionKey) + 1, fromSequenceNr)
   // log.debug("Starting message scan from {}", initialFromSequenceNr)

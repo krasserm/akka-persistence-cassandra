@@ -13,18 +13,10 @@ class StreamMergerTest extends WordSpecLike with MustMatchers {
 
       val stream = Stream(JournalId("1"), entries.iterator)
 
-      val state = new MergeState(
-        Map[JournalId, Long](),
-        Map[PersistenceId, Long](),
-        Seq(stream),
-        0,
-        Seq(),
-        Set(),
-        0)
+      val mergeResult =
+        StreamMerger.merge(Map[JournalId, Long](), Map[PersistenceId, Long](), Seq(stream))
 
-      val mergeResult = StreamMerger.merge(state).get
-
-      mergeResult must be((
+      mergeResult must be(MergeSuccess(
           Map[JournalId, Long](JournalId("1") -> 1),
           Map[PersistenceId, Long](PersistenceId("1") -> 2),
           entries))
@@ -45,20 +37,35 @@ class StreamMergerTest extends WordSpecLike with MustMatchers {
 
       val stream = Stream(JournalId("1"), entries.iterator)
 
-      val state = new MergeState(
-        Map[JournalId, Long](),
-        Map[PersistenceId, Long](),
-        Seq(stream),
-        0,
-        Seq(),
-        Set(),
-        0)
+      val mergeResult =
+        StreamMerger.merge(Map[JournalId, Long](), Map[PersistenceId, Long](), Seq(stream))
 
-      val mergeResult = StreamMerger.merge(state).get
-
-      mergeResult must be((
+      mergeResult must be(MergeSuccess(
         Map[JournalId, Long](JournalId("1") -> 3),
         Map[PersistenceId, Long](PersistenceId("1") -> 4),
+        correctEntries))
+    }
+
+    "merge stream not from beginning" in {
+      val entries = Seq(
+        JournalEntry(JournalId("1"), 7, PersistenceId("1"), 4, null),
+        JournalEntry(JournalId("1"), 8, PersistenceId("1"), 5, null))
+
+      val correctEntries = Seq(
+        JournalEntry(JournalId("1"), 7, PersistenceId("1"), 4, null),
+        JournalEntry(JournalId("1"), 8, PersistenceId("1"), 5, null))
+
+      val stream = Stream(JournalId("1"), entries.iterator)
+
+      val mergeResult =
+        StreamMerger.merge(
+          Map[JournalId, Long](JournalId("1") -> 6),
+          Map[PersistenceId, Long](PersistenceId("1") -> 3),
+          Seq(stream))
+
+      mergeResult must be(MergeSuccess(
+        Map[JournalId, Long](JournalId("1") -> 8),
+        Map[PersistenceId, Long](PersistenceId("1") -> 5),
         correctEntries))
     }
 
@@ -70,18 +77,10 @@ class StreamMergerTest extends WordSpecLike with MustMatchers {
 
       val stream = Stream(JournalId("1"), entries.iterator)
 
-      val state = new MergeState(
-        Map[JournalId, Long](),
-        Map[PersistenceId, Long](),
-        Seq(stream),
-        0,
-        Seq(),
-        Set(),
-        0)
+      val mergeResult =
+        StreamMerger.merge(Map[JournalId, Long](), Map[PersistenceId, Long](), Seq(stream))
 
-      val mergeResult = StreamMerger.merge(state).get
-
-      mergeResult must be((
+      mergeResult must be(MergeSuccess(
         Map[JournalId, Long](JournalId("1") -> 2),
         Map[PersistenceId, Long](PersistenceId("1") -> 2, PersistenceId("2") -> 1),
         entries))
@@ -108,18 +107,10 @@ class StreamMergerTest extends WordSpecLike with MustMatchers {
       val stream1 = Stream(JournalId("1"), entries1.iterator)
       val stream2 = Stream(JournalId("2"), entries2.iterator)
 
-      val state = new MergeState(
-        Map[JournalId, Long](),
-        Map[PersistenceId, Long](),
-        Seq(stream1, stream2),
-        0,
-        Seq(),
-        Set(),
-        0)
+      val mergeResult =
+        StreamMerger.merge(Map[JournalId, Long](), Map[PersistenceId, Long](), Seq(stream1, stream2))
 
-      val mergeResult = StreamMerger.merge(state).get
-
-      mergeResult must be((
+      mergeResult must be(MergeSuccess(
         Map[JournalId, Long](JournalId("1") -> 1, JournalId("2") -> 2),
         Map[PersistenceId, Long](PersistenceId("1") -> 2, PersistenceId("2") -> 3),
         correctEntries))
@@ -148,18 +139,10 @@ class StreamMergerTest extends WordSpecLike with MustMatchers {
       val stream1 = Stream(JournalId("1"), entries1.iterator)
       val stream2 = Stream(JournalId("2"), entries2.iterator)
 
-      val state = new MergeState(
-        Map[JournalId, Long](),
-        Map[PersistenceId, Long](),
-        Seq(stream1, stream2),
-        0,
-        Seq(),
-        Set(),
-        0)
+      val mergeResult =
+        StreamMerger.merge(Map[JournalId, Long](), Map[PersistenceId, Long](), Seq(stream1, stream2))
 
-      val mergeResult = StreamMerger.merge(state).get
-
-      mergeResult must be((
+      mergeResult must be(MergeSuccess(
         Map[JournalId, Long](JournalId("1") -> 2, JournalId("2") -> 2),
         Map[PersistenceId, Long](PersistenceId("1") -> 3, PersistenceId("2") -> 3),
         correctEntries))
@@ -171,19 +154,21 @@ class StreamMergerTest extends WordSpecLike with MustMatchers {
         JournalEntry(JournalId("1"), 1, PersistenceId("1"), 3, null),
         JournalEntry(JournalId("1"), 2, PersistenceId("1"), 4, null))
 
+      val correctEntries = Seq(JournalEntry(JournalId("1"), 0, PersistenceId("1"), 1, null))
+      val unmerged = Set(
+        JournalEntry(JournalId("1"), 1, PersistenceId("1"), 3, null),
+        JournalEntry(JournalId("1"), 2, PersistenceId("1"), 4, null))
+
       val stream = Stream(JournalId("2"), entries.iterator)
 
-      val state = new MergeState(
-        Map[JournalId, Long](),
-        Map[PersistenceId, Long](),
-        Seq(stream),
-        0,
-        Seq(),
-        Set(),
-        0)
+      val mergeResult =
+        StreamMerger.merge(Map[JournalId, Long](), Map[PersistenceId, Long](), Seq(stream))
 
-      val mergeResult = StreamMerger.merge(state)
-      mergeResult must be(None)
+      mergeResult must be(MergeFailure(
+        Map[JournalId, Long](JournalId("1") -> 0),
+        Map[PersistenceId, Long](PersistenceId("1") -> 1),
+        correctEntries,
+        unmerged))
     }
   }
 }
