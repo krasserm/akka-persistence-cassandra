@@ -20,19 +20,14 @@ import com.datastax.driver.core.utils.Bytes
 
 class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraStatements {
 
-  // TODO: journalId management.
-  // TODO: Uniqueness in distributed environment. Coordination/coordination-less generation?
-  // TODO: Cluster membership change, Journal instances added and removed.
-  // TODO: We need to ensure globally unique journalId. Conflicts would violate the single writer requirement.
-  // TODO: Garbage collecting or infinitely growing journalId set?
-  private[this] val journalId = UUID.randomUUID.toString
-
-  private[this] var journalSequenceNr = 0L
-
-  val config = new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
-  val serialization = SerializationExtension(context.system)
+  val config =
+    new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
 
   import config._
+
+  val serialization = SerializationExtension(context.system)
+
+  private[this] var journalSequenceNr = 0L
 
   val cluster = ClusterBuilder.cluster(config)
   val session = cluster.connect()
@@ -91,11 +86,10 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   private def statementGroup(atomicWrites: Seq[SerializedAtomicWrite]): Seq[BoundStatement] = {
-    val firstJournalSequenceNr = atomicWrites.last.payload.last.journalSequenceNr
-    val lastJournalSequenceNr = atomicWrites.head.payload.head.journalSequenceNr
+    val firstJournalSequenceNr = atomicWrites.head.payload.head.journalSequenceNr
+    val lastJournalSequenceNr = atomicWrites.last.payload.last.journalSequenceNr
 
     val maxPnr = partitionNr(firstJournalSequenceNr)
-    val firstSeq = atomicWrites.head.payload.head.sequenceNr
     val minPnr = partitionNr(lastJournalSequenceNr)
     val persistenceId: String = atomicWrites.head.persistenceId
     val all = atomicWrites.flatMap(_.payload)
