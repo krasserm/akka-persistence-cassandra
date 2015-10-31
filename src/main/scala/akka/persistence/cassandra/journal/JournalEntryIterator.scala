@@ -14,23 +14,34 @@ final class JournalEntryIterator (
     toSequenceNr: Long,
     targetPartitionSize: Int,
     max: Long)(session: Session, override val config: CassandraJournalConfig)
-  extends MessageIterator[JournalEntry] (
-    partitionId,
-    fromSequenceNr,
-    toSequenceNr,
-    targetPartitionSize,
-    max)
+  extends Iterator[JournalEntry]
   with CassandraStatements {
 
   import config._
 
   private[this] val preparedSelectMessages =
     session.prepare(selectMessages).setConsistencyLevel(readConsistency)
-
   private[this] val preparedCheckInUse=
     session.prepare(selectInUse).setConsistencyLevel(readConsistency)
 
-  protected def extractor(row: Row): JournalEntry =
+  private[this] val iterator = new MessageIterator[JournalEntry] (
+    partitionId,
+    fromSequenceNr,
+    toSequenceNr,
+    targetPartitionSize,
+    max,
+    extractor,
+    default,
+    sequenceNumber,
+    select,
+    inUse,
+    highestDeletedSequenceNumber,
+    sequenceNumberColumn)
+
+  override def hasNext: Boolean = iterator.hasNext
+  override def next(): JournalEntry = iterator.next()
+
+  private[this] def extractor(row: Row): JournalEntry =
     JournalEntry(
       JournalId(row.getString("journal_id")),
       row.getLong("journal_sequence_nr"),
@@ -38,7 +49,7 @@ final class JournalEntryIterator (
       row.getLong("sequence_nr"),
       row.getBytes("message"))
 
-  override protected def select(
+  private[this] def select(
       partitionKey: String,
       currentPnr: Long,
       fromSnr: Long,
@@ -49,20 +60,20 @@ final class JournalEntryIterator (
       fromSnr: JLong,
       toSnr: JLong)).iterator.asScala
 
-  override protected def inUse(partitionKey: String, currentPnr: Long): Boolean = {
+  private[this] def inUse(partitionKey: String, currentPnr: Long): Boolean = {
     val execute: ResultSet =
       session.execute(preparedCheckInUse.bind(partitionKey, currentPnr: JLong))
     if (execute.isExhausted) false
     else execute.one().getBool("used")
   }
 
-  override protected def default: JournalEntry =
+  private[this] def default: JournalEntry =
     JournalEntry(JournalId(""), -1l, PersistenceId(""), 0, null)
 
-  override protected def sequenceNumberColumn: String = "journal_sequence_nr"
+  private[this] def sequenceNumberColumn: String = "journal_sequence_nr"
 
-  override protected def sequenceNumber(element: JournalEntry): Long = element.journalSequenceNr
+  private[this] def sequenceNumber(element: JournalEntry): Long = element.journalSequenceNr
 
   // TODO: Fix.
-  override protected def highestDeletedSequenceNumber(partitionKey: String): Long = -1l
+  private[this] def highestDeletedSequenceNumber(partitionKey: String): Long = -1l
 }

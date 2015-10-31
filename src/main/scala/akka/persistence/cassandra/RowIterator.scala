@@ -2,8 +2,6 @@ package akka.persistence.cassandra
 
 import com.datastax.driver.core.Row
 
-import JournalFunctions._
-
 /**
  * Iterates over rows, crossing partition boundaries.
  */
@@ -54,4 +52,7 @@ private class RowIterator(
 
   private def sequenceNrMax(partitionNr: Long): Long =
     (partitionNr + 1L) * targetPartitionSize
+
+  private def partitionNr(sequenceNr: Long, targetPartitionSize: Int): Long =
+    (sequenceNr - 1L) / targetPartitionSize
 }

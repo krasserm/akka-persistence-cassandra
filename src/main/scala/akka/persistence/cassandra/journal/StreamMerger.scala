@@ -58,7 +58,8 @@ object StreamMerger {
       journalIdProgress: Progress[JournalId],
       persistenceIdProgress: Progress[PersistenceId],
       independentStreams: Seq[Stream]): MergeResult =
-    merge(MergeState(journalIdProgress, persistenceIdProgress, independentStreams, 0, Seq(), Set(), 0))
+    merge(
+      MergeState(journalIdProgress, persistenceIdProgress, independentStreams, 0, Seq(), Set(), 0))
 
   @tailrec
   private[this] def merge(state: MergeState): MergeResult = {
@@ -112,7 +113,10 @@ object StreamMerger {
           mergedStream = mergedStream :+ head,
           noActionCounter = 0)
       } else {
-        state.copy(independentStreamPointer = incrementPointer, buffer = buffer + head, noActionCounter = 0)
+        state.copy(
+          independentStreamPointer = incrementPointer,
+          buffer = buffer + head,
+          noActionCounter = 0)
       }
     } else {
       state.copy(independentStreamPointer = incrementPointer, noActionCounter = noActionCounter + 1)
@@ -120,7 +124,6 @@ object StreamMerger {
   }
 
   // TODO: Handle situation when new persistenceId is encountered, but its sequenceNr is not 0
-  // TODO: Represent progress for not known persistenceIds properly across merger.
   private[this] def isExpectedSequenceNr(
       event: JournalEntry,
       persistenceIdProgress: Progress[PersistenceId]) =

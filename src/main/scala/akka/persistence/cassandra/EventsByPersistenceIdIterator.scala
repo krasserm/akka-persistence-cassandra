@@ -1,16 +1,15 @@
 package akka.persistence.cassandra
 
 import java.lang.{Long => JLong}
+import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
 import akka.persistence.PersistentRepr
 import akka.persistence.PersistentRepr._
-import akka.persistence.cassandra.JournalFunctions._
-import akka.persistence.cassandra.journal.CassandraStatements
-import akka.persistence.cassandra.query.journal.{CassandraReadStatements,
-CassandraReadJournalConfig}
+import akka.persistence.cassandra.query.journal.{CassandraReadStatements, CassandraReadJournalConfig}
 import akka.serialization.Serialization
+import com.datastax.driver.core.utils.Bytes
 import com.datastax.driver.core.{ResultSet, Row, Session}
 
 final class EventsByPersistenceIdIterator(
@@ -22,35 +21,49 @@ final class EventsByPersistenceIdIterator(
     session: Session,
     override val config: CassandraReadJournalConfig,
     serialization: Serialization)
-  extends MessageIterator[PersistentRepr] (
-    partitionId,
-    fromSequenceNr,
-    toSequenceNr,
-    targetPartitionSize,
-    max)
+  extends Iterator[PersistentRepr]
   with CassandraReadStatements {
 
   import config._
 
-  private[this] val preparedSelectMessages = session.prepare(selectMessages).setConsistencyLevel(readConsistency)
-  private[this] val preparedCheckInUse = session.prepare(selectInUse).setConsistencyLevel(readConsistency)
+  private[this] val preparedSelectMessages =
+    session.prepare(selectMessages).setConsistencyLevel(readConsistency)
+  private[this] val preparedCheckInUse =
+    session.prepare(selectInUse).setConsistencyLevel(readConsistency)
 
-  override protected def extractor(row: Row): PersistentRepr =
+  val iterator = new MessageIterator(
+    partitionId,
+    fromSequenceNr,
+    toSequenceNr,
+    targetPartitionSize,
+    max,
+    extractor,
+    default,
+    sequenceNumber,
+    select,
+    inUse,
+    highestDeletedSequenceNumber,
+    sequenceNumberColumn)
+
+  override def hasNext: Boolean = iterator.hasNext
+  override def next(): PersistentRepr = iterator.next()
+
+  private[this] def extractor(row: Row): PersistentRepr =
     persistentFromByteBuffer(serialization, row.getBytes("message"))
 
-  override protected def inUse(partitionKey: String, currentPnr: Long): Boolean = {
+  private[this] def inUse(partitionKey: String, currentPnr: Long): Boolean = {
     val execute: ResultSet = session.execute(preparedCheckInUse.bind(partitionId, currentPnr: JLong))
     if (execute.isExhausted) false
     else execute.one().getBool("used")
   }
 
-  override protected def default: PersistentRepr = PersistentRepr(Undefined)
+  private[this] def default: PersistentRepr = PersistentRepr(Undefined)
 
-  override protected def sequenceNumberColumn: String = "sequence_nr"
+  private[this] def sequenceNumberColumn: String = "sequence_nr"
 
-  override protected def sequenceNumber(element: PersistentRepr): Long = element.sequenceNr
+  private[this] def sequenceNumber(element: PersistentRepr): Long = element.sequenceNr
 
-  override protected def select(
+  private[this] def select(
       partitionKey: String,
       currentPnr: Long,
       fromSnr: Long,
@@ -62,5 +75,10 @@ final class EventsByPersistenceIdIterator(
       toSnr: JLong)).iterator.asScala
 
   // TODO: Fix.
-  override protected def highestDeletedSequenceNumber(partitionKey: String): Long = 0l
+  private[this] def highestDeletedSequenceNumber(partitionKey: String): Long = 0l
+
+  private[this] def persistentFromByteBuffer(
+      serialization: Serialization,
+      b: ByteBuffer): PersistentRepr =
+    serialization.deserialize(Bytes.getArray(b), classOf[PersistentRepr]).get
 }

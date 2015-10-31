@@ -2,15 +2,19 @@ package akka.persistence.cassandra.journal
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.util.control.Exception._
 
 import akka.actor.{Props, Actor}
 import akka.persistence.cassandra.journal.StreamMerger._
 import akka.serialization.SerializationExtension
 import com.datastax.driver.core.Session
+import com.datastax.driver.core.exceptions.DriverException
 
 object StreamMergerActor {
   def props(config: CassandraJournalConfig, session: Session): Props =
     Props(new StreamMergerActor(config, session))
+
+  val name = "StreamMerger"
 }
 
 /**
@@ -65,7 +69,8 @@ private class StreamMergerActor(
   private[this] val preparedSelectDistinctJournalId =
     session.prepare(selectDistinctJournalId).setConsistencyLevel(readConsistency)
 
-  override def receive: Receive = merging(initialJournalIdProgress, initialPersistenceIdProgress, 50l)
+  override def receive: Receive =
+    merging(initialJournalIdProgress, initialPersistenceIdProgress, 50l)
 
   private[this] def merging(
     journalIdProgress: Progress[JournalId],
@@ -73,9 +78,13 @@ private class StreamMergerActor(
     step: Long): Receive = {
 
     case Continue =>
-      val currentJournalIds = journalIds()
+      val currentJournalIds =
+        catching(classOf[DriverException]).withTry(journalIds()).getOrElse(Seq())
+
       val updatedProgress = currentJournalIds
-        .map(journalId => (JournalId(journalId), journalIdProgress.getOrElse(JournalId(journalId), -1l)))
+        .map{ journalId =>
+          (JournalId(journalId), journalIdProgress.getOrElse(JournalId(journalId), -1l))
+        }
         .toMap
 
       val independentStreams =
