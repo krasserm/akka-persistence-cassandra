@@ -23,19 +23,14 @@ import com.datastax.driver.core.utils.Bytes
 
 class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraConfigChecker with CassandraStatements {
 
-  // TODO: journalId management.
-  // TODO: Uniqueness in distributed environment. Coordination/coordination-less generation?
-  // TODO: Cluster membership change, Journal instances added and removed.
-  // TODO: We need to ensure globally unique journalId. Conflicts would violate the single writer requirement.
-  // TODO: Garbage collecting or infinitely growing journalId set?
-  private[this] val journalId = UUID.randomUUID.toString
-
-  private[this] var journalSequenceNr = 0L
-
-  val config = new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
-  val serialization = SerializationExtension(context.system)
+  val config =
+    new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
 
   import config._
+
+  val serialization = SerializationExtension(context.system)
+
+  private[this] var journalSequenceNr = 0L
 
   val cluster = ClusterBuilder.cluster(config)
   val session = cluster.connect()
@@ -98,11 +93,10 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   private def statementGroup(atomicWrites: Seq[SerializedAtomicWrite]): Seq[BoundStatement] = {
-    val firstJournalSequenceNr = atomicWrites.last.payload.last.journaSequenceNr
-    val lastJournalSequenceNr = atomicWrites.head.payload.head.journaSequenceNr
+    val firstJournalSequenceNr = atomicWrites.head.payload.head.journalSequenceNr
+    val lastJournalSequenceNr = atomicWrites.last.payload.last.journalSequenceNr
 
     val maxPnr = partitionNr(firstJournalSequenceNr)
-    val firstSeq = atomicWrites.head.payload.head.sequenceNr
     val minPnr = partitionNr(lastJournalSequenceNr)
     val persistenceId: String = atomicWrites.head.persistenceId
     val all = atomicWrites.flatMap(_.payload)
@@ -112,7 +106,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     require(maxPnr - minPnr <= 1, "Do not support AtomicWrites that span 3 partitions. Keep AtomicWrites <= max partition size.")
 
     val writes: Seq[BoundStatement] = all.map { m =>
-      preparedWriteMessage.bind(journalId, maxPnr: JLong, m.journaSequenceNr: JLong, persistenceId, m.sequenceNr: JLong, m.serialized)
+      preparedWriteMessage.bind(journalId, maxPnr: JLong, m.journalSequenceNr: JLong, persistenceId, m.sequenceNr: JLong, m.serialized)
     }
     // in case we skip an entire partition we want to make sure the empty partition has in in-use flag so scans
     // keep going when they encounter it
@@ -165,7 +159,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   private case class SerializedAtomicWrite(persistenceId: String, payload: Seq[Serialized])
-  private case class Serialized(journaSequenceNr: Long, sequenceNr: Long, serialized: ByteBuffer)
+  private case class Serialized(journalSequenceNr: Long, sequenceNr: Long, serialized: ByteBuffer)
   private case class PartitionInfo(partitionNr: Long, minSequenceNr: Long, maxSequenceNr: Long)
 }
 
