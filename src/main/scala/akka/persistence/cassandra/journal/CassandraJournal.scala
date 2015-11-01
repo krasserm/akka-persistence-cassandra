@@ -21,7 +21,7 @@ import com.datastax.driver.core.policies.RetryPolicy.RetryDecision
 import com.datastax.driver.core.policies.{LoggingRetryPolicy, RetryPolicy}
 import com.datastax.driver.core.utils.Bytes
 
-class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraStatements {
+class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraConfigChecker with CassandraStatements {
 
   // TODO: journalId management.
   // TODO: Uniqueness in distributed environment. Coordination/coordination-less generation?
@@ -52,13 +52,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   session.execute(createMetatdataTable)
   session.execute(createConfigTable)
 
-  val persistentConfig: Map[String, String] = session.execute(selectConfig).all().toList
-    .map(row => (row.getString("property"), row.getString("value"))).toMap
-
-  persistentConfig.get(CassandraJournalConfig.TargetPartitionProperty).foreach(oldValue =>
-    require(oldValue.toInt == config.targetPartitionSize, "Can't change target-partition-size"))
-
-  session.execute(writeConfig, CassandraJournalConfig.TargetPartitionProperty, config.targetPartitionSize.toString)
+  val persistentConfig: Map[String, String] = initializePersistentConfig
 
   // TODO: Figure out how to sensibly run the merging process.
   Cluster(context.system).join(Cluster(context.system).selfAddress)
