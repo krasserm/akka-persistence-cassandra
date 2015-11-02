@@ -40,6 +40,18 @@ trait CassandraStatements {
       VALUES (?, ?, ?, ?, ?, ?, true)
     """
 
+  def writeEventsByPersistenceId =
+    s"""
+      INSERT INTO ${eventsByPersistenceIdTableName} (persistence_id, partition_nr, sequence_nr, message, used)
+      VALUES (?, ?, ?, ?, true)
+     """
+
+  def writeEventsByPersistenceIdInUse =
+    s"""
+       INSERT INTO ${eventsByPersistenceIdTableName} (journal_id, partition_nr, used)
+       VALUES(?, ?, true)
+     """
+
   def selectMessages = s"""
       SELECT * FROM ${tableName} WHERE
         journal_id = ? AND
@@ -72,6 +84,7 @@ trait CassandraStatements {
        VALUES(?, ?, true)
      """
 
+  private def eventsByPersistenceIdTableName = s"${config.keyspace}.${config.eventsByPersistenceIdTable}"
   private def tableName = s"${config.keyspace}.${config.table}"
   private def configTableName = s"${config.keyspace}.${config.configTable}"
   private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"

@@ -46,7 +46,7 @@ object StreamMergerActor {
  * @param config CassandraJournalConfig.
  * @param session Session.
  */
-private class StreamMergerActor(
+class StreamMergerActor(
   val config: CassandraJournalConfig,
   session: Session) extends Actor with CassandraStatements {
 
