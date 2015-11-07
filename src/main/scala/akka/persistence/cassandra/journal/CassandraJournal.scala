@@ -9,6 +9,9 @@ import scala.collection.immutable.Seq
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 
+import akka.cluster.Cluster
+import akka.cluster.singleton.{ClusterSingletonManagerSettings, ClusterSingletonManager}
+import akka.cluster.singleton.ClusterSingletonManager.Internal.End
 import akka.persistence._
 import akka.persistence.cassandra._
 import akka.persistence.journal.AsyncWriteJournal
@@ -18,7 +21,7 @@ import com.datastax.driver.core.policies.RetryPolicy.RetryDecision
 import com.datastax.driver.core.policies.{LoggingRetryPolicy, RetryPolicy}
 import com.datastax.driver.core.utils.Bytes
 
-class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraStatements {
+class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraConfigChecker with CassandraStatements {
 
   val config =
     new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
@@ -32,6 +35,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   val cluster = ClusterBuilder.cluster(config)
   val session = cluster.connect()
 
+
   case class MessageId(persistenceId: String, sequenceNr: Long)
 
   if (config.keyspaceAutoCreate) {
@@ -43,13 +47,16 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   session.execute(createMetatdataTable)
   session.execute(createConfigTable)
 
-  val persistentConfig: Map[String, String] = session.execute(selectConfig).all().toList
-    .map(row => (row.getString("property"), row.getString("value"))).toMap
+  val persistentConfig: Map[String, String] = initializePersistentConfig
 
-  persistentConfig.get(CassandraJournalConfig.TargetPartitionProperty).foreach(oldValue =>
-    require(oldValue.toInt == config.targetPartitionSize, "Can't change target-partition-size"))
+  // TODO: Figure out how to sensibly run the merging process.
+  Cluster(context.system).join(Cluster(context.system).selfAddress)
 
-  session.execute(writeConfig, CassandraJournalConfig.TargetPartitionProperty, config.targetPartitionSize.toString)
+  val merger = context.system.actorOf(ClusterSingletonManager.props(
+    StreamMergerActor.props(config, session),
+    End,
+    ClusterSingletonManagerSettings(context.system)),
+    StreamMergerActor.name)
 
   val preparedWriteMessage = session.prepare(writeMessage)
   val preparedWriteInUse = session.prepare(writeInUse)

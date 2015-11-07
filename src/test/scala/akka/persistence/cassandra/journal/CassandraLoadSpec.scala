@@ -13,6 +13,7 @@ import scala.language.postfixOps
 object CassandraLoadSpec {
   val config = ConfigFactory.parseString(
     """
+      |akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
       |akka.persistence.journal.plugin = "cassandra-journal"
       |akka.persistence.snapshot-store.plugin = "cassandra-snapshot-store"
       |akka.test.single-expect-default = 10s

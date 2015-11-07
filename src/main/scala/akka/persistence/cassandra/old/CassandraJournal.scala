@@ -1,4 +1,3 @@
-/*
 package akka.persistence.cassandra.old
 
 import java.lang.{Long => JLong}
@@ -27,7 +26,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
 
   import config._
 
-  val cluster = clusterBuilder.build
+  val cluster = ClusterBuilder.cluster(config)
   val session = cluster.connect()
 
   case class MessageId(persistenceId: String, sequenceNr: Long)
@@ -181,4 +180,3 @@ class FixedRetryPolicy(number: Int) extends RetryPolicy {
     if (nbRetry < number) RetryDecision.retry(cl) else RetryDecision.rethrow()
   }
 }
-*/

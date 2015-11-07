@@ -40,12 +40,30 @@ trait CassandraStatements {
       VALUES (?, ?, ?, ?, ?, ?, true)
     """
 
+  def selectMessages = s"""
+      SELECT * FROM ${tableName} WHERE
+        journal_id = ? AND
+        partition_nr = ? AND
+        journal_sequence_nr >= ? AND
+        journal_sequence_nr <= ?
+    """
+
+  def selectInUse = s"""
+     SELECT used from ${tableName} WHERE
+      journal_id = ? AND
+      partition_nr = ?
+   """
+
+  def selectDistinctJournalId = s"""
+      SELECT DISTINCT journal_id, partition_nr FROM ${tableName}
+    """
+
   def selectConfig = s"""
       SELECT * FROM ${configTableName}
     """
 
   def writeConfig = s"""
-      INSERT INTO ${configTableName}(property, value) VALUES(?, ?)
+      INSERT INTO ${configTableName}(property, value) VALUES(?, ?) IF NOT EXISTS
     """
 
   def writeInUse =
