@@ -25,17 +25,17 @@ object StreamMergerActor {
  * streams up to a maximum of configured step. Then creates a single logical stream out of the
  * n independent streams. There is no ordering between the independent streams and the only
  * requirement is to maintain causal order per persistenceId. When the whole batch can be merged
- * the stream is emitted. If not (e.g. causality violation in given batch) then the merger
- * requests again for more data.
+ * the stream is emitted. If not (e.g. unresolvable causality violation in given batch)
+ * the merger returns that information and more data can be requested or another approach taken.
  *
- * The emmited logical stream can be stored into database in a batch. This grants atomicity, but not
- * isolation which should be what we need. We can recover with RYOW consistency from the persisted
- * index table similarly to original functionality. But if we store the progress in all independent
- * streams we should be able to rerun the merging and idempotency shoud ensure we don't emit
- * duplicates. If part of the batch is not perceived as complete due to eventual
- * consistency should be fine and reconciled during replay.
+ * The emitted logical stream can be stored into database in a batch, which grants atomicity,
+ * It does not grant isolation, but in case of failure the stream merging can be replayed from
+ * last known state. It may cause duplicated emission so the index table update must be idempotent.
+ * Part of a batch may not be perceived as complete due to eventual consistency, but this can be
+ * reconciled during replay. Such approach should achieve required causal consistency per key and
+ * correctness during replay and failures.
  *
- * Other options were considered, e.g. storing each element as it arrives. This would require a more
+ * Other options were considered, e.g. storing each element independently. This would require a more
  * granular control of processed elements. E.g. updating the master table with a "processed" flag
  * or storing current state of a buffer in database using a batch. The reason is that maintaining
  * causal order requires a buffer to store out of sequence elements until they are expected in
@@ -105,10 +105,7 @@ class StreamMergerActor(
 
       /**
        * We now have a merged stream with the desired attributes or a stream that failed to merge.
-       * So the storage approach can be applied.
-       * 1) We can store the stream as a whole only if it merges cleanly.
-       * 2) We can store each element independently/part of the stream and in case of failure
-       *   preserve the state (e.g. elements that were not merged, elements that were merged etc.)
+       * An index table and progress update approach can be applied.
        */
       val nextState =
         mergeResult match {
