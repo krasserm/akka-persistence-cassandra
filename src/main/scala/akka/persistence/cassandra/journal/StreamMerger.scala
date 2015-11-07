@@ -47,13 +47,13 @@ object StreamMerger {
   // TODO: Simply .sort by persistenceId and check sequenceNr?
   // TODO: It could work well. But do we want to achieve some "fairness" between streams?
   /**
-   * Merge returns single merged stream of events with preserved causality per persistenceId.
-   *
-   * @param journalIdProgress Progress of processing in journal instances.
-   * @param persistenceIdProgress Progress of processing of each persistenceId.
-   * @param independentStreams The independent unmerged streams.
-   * @return
-   */
+    * Merge returns single merged stream of events with preserved causality per persistenceId.
+    *
+    * @param journalIdProgress Progress of processing in journal instances.
+    * @param persistenceIdProgress Progress of processing of each persistenceId.
+    * @param independentStreams The independent unmerged streams.
+    * @return
+    */
   def merge(
       journalIdProgress: Progress[JournalId],
       persistenceIdProgress: Progress[PersistenceId],

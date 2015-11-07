@@ -18,34 +18,34 @@ object StreamMergerActor {
 }
 
 /**
- * Merges n independent physical streams into a single logical stream.
- * Preserves causal order per persistenceId.
- *
- * The intent of current functionality is to work in batches. The merger retrieves data from all
- * streams up to a maximum of configured step. Then creates a single logical stream out of the
- * n independent streams. There is no ordering between the independent streams and the only
- * requirement is to maintain causal order per persistenceId. When the whole batch can be merged
- * the stream is emitted. If not (e.g. unresolvable causality violation in given batch)
- * the merger returns that information and more data can be requested or another approach taken.
- *
- * The emitted logical stream can be stored into database in a batch, which grants atomicity,
- * It does not grant isolation, but in case of failure the stream merging can be replayed from
- * last known state. It may cause duplicated emission so the index table update must be idempotent.
- * Part of a batch may not be perceived as complete due to eventual consistency, but this can be
- * reconciled during replay. Such approach should achieve required causal consistency per key and
- * correctness during replay and failures.
- *
- * Other options were considered, e.g. storing each element independently. This would require a more
- * granular control of processed elements. E.g. updating the master table with a "processed" flag
- * or storing current state of a buffer in database using a batch. The reason is that maintaining
- * causal order requires a buffer to store out of sequence elements until they are expected in
- * sequence. This buffer must be persistent and recovered in case of failure otherwise the elements
- * could remain unprocessed. Creating a batch does not require any additional data structure and
- * is similar to how CassandraJournal works.
- *
- * @param config CassandraJournalConfig.
- * @param session Session.
- */
+  * Merges n independent physical streams into a single logical stream.
+  * Preserves causal order per persistenceId.
+  *
+  * The intent of current functionality is to work in batches. The merger retrieves data from all
+  * streams up to a maximum of configured step. Then creates a single logical stream out of the
+  * n independent streams. There is no ordering between the independent streams and the only
+  * requirement is to maintain causal order per persistenceId. When the whole batch can be merged
+  * the stream is emitted. If not (e.g. unresolvable causality violation in given batch)
+  * the merger returns that information and more data can be requested or another approach taken.
+  *
+  * The emitted logical stream can be stored into database in a batch, which grants atomicity,
+  * It does not grant isolation, but in case of failure the stream merging can be replayed from
+  * last known state. It may cause duplicated emission so the index table update must be idempotent.
+  * Part of a batch may not be perceived as complete due to eventual consistency, but this can be
+  * reconciled during replay. Such approach should achieve required causal consistency per key and
+  * correctness during replay and failures.
+  *
+  * Other options were considered, e.g. storing each element independently. This would require a more
+  * granular control of processed elements. E.g. updating the master table with a "processed" flag
+  * or storing current state of a buffer in database using a batch. The reason is that maintaining
+  * causal order requires a buffer to store out of sequence elements until they are expected in
+  * sequence. This buffer must be persistent and recovered in case of failure otherwise the elements
+  * could remain unprocessed. Creating a batch does not require any additional data structure and
+  * is similar to how CassandraJournal works.
+  *
+  * @param config CassandraJournalConfig.
+  * @param session Session.
+  */
 class StreamMergerActor(
   val config: CassandraJournalConfig,
   session: Session) extends Actor with CassandraStatements {
@@ -104,9 +104,9 @@ class StreamMergerActor(
       val mergeResult = merge(updatedProgress, persistenceIdProgress, independentStreams)
 
       /**
-       * We now have a merged stream with the desired attributes or a stream that failed to merge.
-       * An index table and progress update approach can be applied.
-       */
+        * We now have a merged stream with the desired attributes or a stream that failed to merge.
+        * The index table and progress storage approach can be applied.
+        */
       val nextState =
         mergeResult match {
           case MergeFailure(_, _, _, _) =>

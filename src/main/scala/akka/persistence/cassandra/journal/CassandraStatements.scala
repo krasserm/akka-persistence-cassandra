@@ -11,7 +11,8 @@ trait CassandraStatements {
 
   def createConfigTable = s"""
       CREATE TABLE IF NOT EXISTS ${configTableName} (
-        property text primary key, value text)
+        property text primary key, value text
+      )
      """
 
   def createTable = s"""
@@ -32,8 +33,43 @@ trait CassandraStatements {
         persistence_id text PRIMARY KEY,
         deleted_to bigint,
         properties map<text,text>
-      );
+      )
    """
+
+  // TODO: TEST UPSERT AND SET CLUST COLS
+  def createPersistenceIdProgressTable = s"""
+      CREATE TABLE IF NOT EXISTS ${persistenceIdProgressTableName} (
+        id int,
+        persistence_id text,
+        progress bigint,
+        PRIMARY KEY (id, persistence_id)
+      )
+     """
+
+  def selectPersistenceIdProgress = s"""
+      SELECT * FROM ${persistenceIdProgressTableName}
+    """
+
+  def writePersistenceIdProgress = s"""
+      INSERT INTO ${persistenceIdProgressTableName} (id, journal_id, progress) VALUES (?, ?, ?)
+    """
+
+  def createJournalIdProgressTable = s"""
+      CREATE TABLE IF NOT EXISTS ${journalIdProgressTableName} (
+        id int,
+        journal_id text,
+        progress bigint,
+        PRIMARY KEY (id, persistence_id)
+      )
+    """
+
+  def selectJournalIdProgress = s"""
+      SELECT * FROM ${journalIdProgressTableName}
+    """
+
+  def writeJournalIdProgress = s"""
+      INSERT INTO ${journalIdProgressTableName} (id, journal_id, progress) VALUES (?, ?, ?)
+    """
 
   def writeMessage = s"""
       INSERT INTO ${tableName} (journal_id, partition_nr, journal_sequence_nr, persistence_id, sequence_nr, message, used)
@@ -84,7 +120,12 @@ trait CassandraStatements {
        VALUES(?, ?, true)
      """
 
-  private def eventsByPersistenceIdTableName = s"${config.keyspace}.${config.eventsByPersistenceIdTable}"
+  private def eventsByPersistenceIdTableName =
+    s"${config.keyspace}.${config.eventsByPersistenceIdTable}"
+  private def persistenceIdProgressTableName =
+    s"${config.keyspace}.${config.persistenceIdProgressTable}"
+  private def journalIdProgressTableName =
+    s"${config.keyspace}.${config.journalIdProgressTable}"
   private def tableName = s"${config.keyspace}.${config.table}"
   private def configTableName = s"${config.keyspace}.${config.configTable}"
   private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"

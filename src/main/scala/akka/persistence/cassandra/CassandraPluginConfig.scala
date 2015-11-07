@@ -17,8 +17,10 @@ class CassandraPluginConfig(val config: Config) {
   val metadataTable: String = config.getString("metadata-table")
   val readConsistency: ConsistencyLevel = ConsistencyLevel.valueOf(config.getString("read-consistency"))
 
+  val journalIdProgressTable = config.getString("journal-id-progress-table")
   val eventsByPersistenceIdTable = config.getString("events-by-persistence-id-table")
   val keyspace: String = config.getString("keyspace")
+  val persistenceIdProgressTable = config.getString("persistence-id-progress-table")
   val table: String = config.getString("table")
 }
 

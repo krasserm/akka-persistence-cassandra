@@ -19,7 +19,7 @@ trait IndexWriter extends CassandraStatements {
   implicit lazy val replayDispatcher = context.system.dispatchers.lookup(config.replayDispatcherId)
 
   val preparedWriteMessage = session.prepare(super.writeEventsByPersistenceId)
-  val preparedWriteInUse = session.prepare(writeInUse)
+  val preparedWriteInUse = session.prepare(writeEventsByPersistenceIdInUse)
 
   // TODO: Store progress of all persistenceJournals so we can resume?
   def writeEventsByPersistenceId(stream: Seq[JournalEntry]): Unit = {
@@ -39,7 +39,7 @@ trait IndexWriter extends CassandraStatements {
     promise.future
   }
 
-  def statementGroup(atomicWrites: (PersistenceId, Seq[JournalEntry])): Seq[BoundStatement] = {
+  private[this] def statementGroup(atomicWrites: (PersistenceId, Seq[JournalEntry])): Seq[BoundStatement] = {
     val firstSequenceNr = atomicWrites._2.head.sequenceNr
     val lastSequenceNr = atomicWrites._2.last.sequenceNr
 
@@ -67,16 +67,16 @@ trait IndexWriter extends CassandraStatements {
     else writes
   }
 
-  private def executeBatch(body: BatchStatement ⇒ Unit, retries: Option[Int] = None): Future[Unit] = {
+  private[this] def executeBatch(body: BatchStatement ⇒ Unit, retries: Option[Int] = None): Future[Unit] = {
     val batch = new BatchStatement().setConsistencyLevel(config.writeConsistency).asInstanceOf[BatchStatement]
     retries.foreach(times => batch.setRetryPolicy(new LoggingRetryPolicy(new FixedRetryPolicy(times))))
     body(batch)
     session.executeAsync(batch).map(_ => ())
   }
 
-  def partitionNr(sequenceNr: Long): Long =
+  private[this] def partitionNr(sequenceNr: Long): Long =
     (sequenceNr - 1L) / config.targetPartitionSize
 
-  private def partitionNew(sequenceNr: Long): Boolean =
+  private[this] def partitionNew(sequenceNr: Long): Boolean =
     (sequenceNr - 1L) % config.targetPartitionSize == 0L
 }
