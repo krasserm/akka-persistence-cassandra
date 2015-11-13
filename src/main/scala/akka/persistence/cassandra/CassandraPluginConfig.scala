@@ -3,6 +3,7 @@ package akka.persistence.cassandra
 import java.net.InetSocketAddress
 
 import com.datastax.driver.core.ConsistencyLevel
+import akka.persistence.cassandra.compaction.CassandraCompactionStrategy
 import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
@@ -11,6 +12,8 @@ class CassandraPluginConfig(val config: Config) {
 
   import akka.persistence.cassandra.CassandraPluginConfig._
 
+
+  val tableCompactionStrategy: CassandraCompactionStrategy = CassandraCompactionStrategy(config.getConfig("table-compaction-strategy"))
   val port: Int = config.getInt("port")
   val contactPoints = getContactPoints(config.getStringList("contact-points").asScala, port)
   val fetchSize = config.getInt("max-result-size")
