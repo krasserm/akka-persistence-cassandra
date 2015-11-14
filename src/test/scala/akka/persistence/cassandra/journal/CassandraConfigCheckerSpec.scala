@@ -17,6 +17,7 @@ import scala.util.{Failure, Success, Try}
 object CassandraConfigCheckerSpec {
   val config = ConfigFactory.parseString(
     """
+      |akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
       |akka.persistence.snapshot-store.plugin = "cassandra-snapshot-store"
       |akka.persistence.journal.plugin = "cassandra-journal"
       |akka.persistence.journal.max-deletion-batch-size = 3

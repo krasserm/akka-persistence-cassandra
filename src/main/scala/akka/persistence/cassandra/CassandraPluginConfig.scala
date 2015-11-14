@@ -12,18 +12,14 @@ class CassandraPluginConfig(val config: Config) {
 
   import akka.persistence.cassandra.CassandraPluginConfig._
 
-
-  val tableCompactionStrategy: CassandraCompactionStrategy = CassandraCompactionStrategy(config.getConfig("table-compaction-strategy"))
   val port: Int = config.getInt("port")
   val contactPoints = getContactPoints(config.getStringList("contact-points").asScala, port)
   val fetchSize = config.getInt("max-result-size")
   val metadataTable: String = config.getString("metadata-table")
   val readConsistency: ConsistencyLevel = ConsistencyLevel.valueOf(config.getString("read-consistency"))
 
-  val journalIdProgressTable = config.getString("journal-id-progress-table")
   val eventsByPersistenceIdTable = config.getString("events-by-persistence-id-table")
   val keyspace: String = config.getString("keyspace")
-  val persistenceIdProgressTable = config.getString("persistence-id-progress-table")
   val table: String = config.getString("table")
 }
 

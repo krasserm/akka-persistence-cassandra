@@ -42,6 +42,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
       session.execute(createKeyspace)
     }
   }
+
   session.execute(createTable)
   session.execute(createMetatdataTable)
   session.execute(createConfigTable)
@@ -49,13 +50,13 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   val persistentConfig: Map[String, String] = initializePersistentConfig
 
   // TODO: Figure out how to sensibly run the merging process.
-  Cluster(context.system).join(Cluster(context.system).selfAddress)
+  /*Cluster(context.system).join(Cluster(context.system).selfAddress)
 
   val merger = context.system.actorOf(ClusterSingletonManager.props(
     StreamMergerActor.props(config, session),
     End,
     ClusterSingletonManagerSettings(context.system)),
-    StreamMergerActor.name)
+    StreamMergerActor.name)*/
 
   val preparedWriteMessage = session.prepare(writeMessage)
   val preparedWriteInUse = session.prepare(writeInUse)

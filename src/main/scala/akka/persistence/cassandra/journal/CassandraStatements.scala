@@ -33,7 +33,7 @@ trait CassandraStatements {
       CREATE TABLE IF NOT EXISTS ${metadataTableName}(
         persistence_id text PRIMARY KEY,
         deleted_to bigint,
-        properties map<text,text>)
+        properties map<text,text>
       )
    """
 
@@ -52,7 +52,7 @@ trait CassandraStatements {
     """
 
   def writePersistenceIdProgress = s"""
-      INSERT INTO ${persistenceIdProgressTableName} (id, journal_id, progress) VALUES (?, ?, ?)
+      INSERT INTO ${persistenceIdProgressTableName} (id, persistence_id, progress) VALUES (?, ?, ?)
     """
 
   def createJournalIdProgressTable = s"""
@@ -60,7 +60,7 @@ trait CassandraStatements {
         id int,
         journal_id text,
         progress bigint,
-        PRIMARY KEY (id, persistence_id)
+        PRIMARY KEY (id, journal_id)
       )
     """
 
@@ -77,6 +77,19 @@ trait CassandraStatements {
       VALUES (?, ?, ?, ?, ?, ?, true)
     """
 
+  def createEventsByPersistenceIdTable =
+    s"""
+      CREATE TABLE IF NOT EXISTS ${eventsByPersistenceIdTableName} (
+        used boolean static,
+        persistence_id text,
+        partition_nr bigint,
+        sequence_nr bigint,
+        message blob,
+        PRIMARY KEY ((persistence_id, partition_nr), sequence_nr))
+        WITH gc_grace_seconds =${config.gc_grace_seconds}
+        AND compaction = ${config.tableCompactionStrategy.asCQL}
+     """.stripMargin
+
   def writeEventsByPersistenceId =
     s"""
       INSERT INTO ${eventsByPersistenceIdTableName} (persistence_id, partition_nr, sequence_nr, message, used)
@@ -85,7 +98,7 @@ trait CassandraStatements {
 
   def writeEventsByPersistenceIdInUse =
     s"""
-       INSERT INTO ${eventsByPersistenceIdTableName} (journal_id, partition_nr, used)
+       INSERT INTO ${eventsByPersistenceIdTableName} (persistence_id, partition_nr, used)
        VALUES(?, ?, true)
      """
 

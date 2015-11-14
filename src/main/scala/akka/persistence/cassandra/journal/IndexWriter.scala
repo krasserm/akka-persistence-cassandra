@@ -2,27 +2,37 @@ package akka.persistence.cassandra.journal
 
 import java.lang.{Long => JLong}
 
-import scala.collection.immutable.Seq
-import scala.concurrent.{Future, Promise}
-import scala.util.{Failure, Success, Try}
+import akka.persistence.cassandra.journal.StreamMerger.{PersistenceId, JournalEntry}
+import com.datastax.driver.core.BoundStatement
 
-import akka.persistence.cassandra._
-import akka.persistence.cassandra.journal.StreamMerger.{PersistenceId, JournalEntry, MergeSuccess}
-import com.datastax.driver.core.policies.LoggingRetryPolicy
-import com.datastax.driver.core.{Session, BatchStatement, BoundStatement}
+trait IndexWriter extends CassandraStatements with BatchWriter {
 
-trait IndexWriter extends CassandraStatements {
-  this: StreamMergerActor =>
-
-  def config: CassandraJournalConfig
-  def session: Session
-  implicit lazy val replayDispatcher = context.system.dispatchers.lookup(config.replayDispatcherId)
+  session.execute(createEventsByPersistenceIdTable)
 
   val preparedWriteMessage = session.prepare(super.writeEventsByPersistenceId)
   val preparedWriteInUse = session.prepare(writeEventsByPersistenceIdInUse)
 
   // TODO: Store progress of all persistenceJournals so we can resume?
-  def writeEventsByPersistenceId(stream: Seq[JournalEntry]): Unit = {
+  def writeIndexProgress(stream: Seq[JournalEntry]): Unit = {
+    val byPersistenceId = stream.groupBy(_.persistenceId)
+
+    val boundJournalEntry: (JournalEntry, Long) => BoundStatement =
+      (entry, maxPnr) => preparedWriteMessage.bind(
+        entry.persistenceId.id,
+        maxPnr: JLong,
+        entry.sequenceNr: JLong,
+        entry.serialized)
+
+    writeBatch[PersistenceId, JournalEntry](
+      byPersistenceId,
+      _._2.head.sequenceNr,
+      _._2.last.sequenceNr,
+      boundJournalEntry,
+      x => x._2.head.persistenceId.id,
+      Some((persistenceId, minPnr) => preparedWriteInUse.bind(persistenceId, minPnr: JLong)))
+  }
+
+  /*def writeEventsByPersistenceId(stream: Seq[JournalEntry]): Unit = {
     val byPersistenceId = stream.groupBy(_.persistenceId)
     val boundStatements = byPersistenceId.map(statementGroup)
 
@@ -78,5 +88,5 @@ trait IndexWriter extends CassandraStatements {
     (sequenceNr - 1L) / config.targetPartitionSize
 
   private[this] def partitionNew(sequenceNr: Long): Boolean =
-    (sequenceNr - 1L) % config.targetPartitionSize == 0L
+    (sequenceNr - 1L) % config.targetPartitionSize == 0L*/
 }

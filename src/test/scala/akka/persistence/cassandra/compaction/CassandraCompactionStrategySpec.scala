@@ -25,6 +25,7 @@ class CassandraCompactionStrategySpec extends WordSpec with MustMatchers with Ca
       |port = 9142
       |max-result-size = 50
       |delete-retries = 4
+      |events-by-persistence-id-table = "eventsByPersistenceId"
     """.stripMargin)
 
   val cassandraPluginConfig = new CassandraPluginConfig(defaultConfigs)

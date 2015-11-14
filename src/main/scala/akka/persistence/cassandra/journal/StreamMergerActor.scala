@@ -47,13 +47,20 @@ object StreamMergerActor {
   * @param session Session.
   */
 class StreamMergerActor(
-  val config: CassandraJournalConfig,
-  session: Session) extends Actor with CassandraStatements {
+    override val config: CassandraJournalConfig,
+    override val session: Session)
+  extends Actor
+  with CassandraStatements
+  with IndexWriter
+  with ProgressWriter {
 
   import config._
 
   private[this] case object Continue
 
+  session.execute(createTable)
+
+  override lazy val executionContext = context.system.dispatchers.lookup(config.replayDispatcherId)
   val serialization = SerializationExtension(context.system)
 
   private[this] val refreshInterval = FiniteDuration(1, SECONDS)
@@ -112,6 +119,8 @@ class StreamMergerActor(
           case MergeFailure(_, _, _, _) =>
             merging(journalIdProgress, persistenceIdProgress, step + 50l)
           case MergeSuccess(newJournalIdProgress, newPersistenceIdProgress, mergedStream) =>
+            writeIndexProgress(mergedStream)
+            writeProgress(newJournalIdProgress, newPersistenceIdProgress)
             merging(newJournalIdProgress, newPersistenceIdProgress, step)
         }
 
@@ -122,7 +131,8 @@ class StreamMergerActor(
   private[this] def initialJournalIdProgress: Progress[JournalId] = Map[JournalId, Long]()
 
   // TODO: FIX Recovery case
-  private[this] def initialPersistenceIdProgress: Progress[PersistenceId] = Map[PersistenceId, Long]()
+  private[this] def initialPersistenceIdProgress: Progress[PersistenceId] =
+    readPersistenceIdProgress()
 
   private[this] def journalIds(): Seq[String] =
     session
