@@ -37,7 +37,6 @@ class SizeTieredCompactionStrategy(config: Config) extends BaseCompactionStrateg
        |${super.asCQL},
        |'bucket_high' : $bucketHigh,
        |'bucket_low' : $bucketLow,
-       |'cold_reads_to_omit' : $coldReadsToOmit,
        |'max_threshold' : $maxThreshold,
        |'min_threshold' : $minThreshold,
        |'min_sstable_size' : $minSSTableSize

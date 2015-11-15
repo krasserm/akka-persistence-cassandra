@@ -1,6 +1,5 @@
 package akka.persistence.cassandra.journal
 
-
 import scala.concurrent._
 
 import scala.util.{Failure, Success, Try}
@@ -16,28 +15,21 @@ trait BatchWriter {
 
   implicit def executionContext: ExecutionContext
 
+  def writeBatchSingle[G, T](data: (G, Seq[T]), boundStatement: T => BoundStatement) =
+    executeBatches(Seq(data._2.map(boundStatement)))
+
   def writeBatch[G, T](
       data: Map[G, Seq[T]],
       firstInBatch: ((G, Seq[T])) => Long,
       lastInBatch: ((G, Seq[T])) => Long,
       boundStatement: (T, Long) => BoundStatement,
       partitionKey: ((G, Seq[T])) => String,
-      writeInUse: Option[(String, Long) => BoundStatement]): Unit = {
+      writeInUse: Option[(String, Long) => BoundStatement]): Future[Seq[Try[Unit]]] = {
 
     val boundStatements =
       data.map(x => statementGroup(x, firstInBatch, lastInBatch, boundStatement, partitionKey, writeInUse))
 
-    val batchStatements = boundStatements.map({ unit =>
-      executeBatch(batch => unit.foreach(batch.add))
-    })
-    val promise = Promise[Seq[Try[Unit]]]()
-
-    Future.sequence(batchStatements).onComplete {
-      case Success(_) => promise.complete(Success(Seq()))
-      case Failure(e) => promise.failure(e)
-    }
-
-    promise.future
+    executeBatches(boundStatements)
   }
 
   private[this] def statementGroup[G, T](
@@ -71,6 +63,21 @@ trait BatchWriter {
       case None =>
         writes
     }
+  }
+
+  private[this] def executeBatches(
+      boundStatements: Iterable[Seq[BoundStatement]]): Future[Seq[Try[Unit]]] = {
+    val batchStatements = boundStatements.map({ unit =>
+      executeBatch(batch => unit.foreach(batch.add))
+    })
+    val promise = Promise[Seq[Try[Unit]]]()
+
+    Future.sequence(batchStatements).onComplete {
+      case Success(_) => promise.complete(Success(Seq()))
+      case Failure(e) => promise.failure(e)
+    }
+
+    promise.future
   }
 
   private[this] def executeBatch(body: BatchStatement ⇒ Unit, retries: Option[Int] = None): Future[Unit] = {

@@ -4,6 +4,8 @@ import java.lang.{Long => JLong}
 import java.nio.ByteBuffer
 import java.util.UUID
 
+import akka.persistence.cassandra.journal.StreamMerger.JournalEntry
+
 import scala.collection.JavaConversions._
 import scala.collection.immutable.Seq
 import scala.concurrent._
@@ -21,8 +23,14 @@ import com.datastax.driver.core.policies.RetryPolicy.RetryDecision
 import com.datastax.driver.core.policies.{LoggingRetryPolicy, RetryPolicy}
 import com.datastax.driver.core.utils.Bytes
 
-class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with CassandraConfigChecker with CassandraStatements {
+class CassandraJournal
+  extends AsyncWriteJournal
+  with CassandraRecovery
+  with CassandraConfigChecker
+  with CassandraStatements
+  with BatchWriter {
 
+  override lazy val executionContext = replayDispatcher
   val config =
     new CassandraJournalConfig(context.system.settings.config.getConfig("cassandra-journal"))
 
@@ -50,13 +58,13 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   val persistentConfig: Map[String, String] = initializePersistentConfig
 
   // TODO: Figure out how to sensibly run the merging process.
-  /*Cluster(context.system).join(Cluster(context.system).selfAddress)
+  Cluster(context.system).join(Cluster(context.system).selfAddress)
 
   val merger = context.system.actorOf(ClusterSingletonManager.props(
     StreamMergerActor.props(config, session),
     End,
     ClusterSingletonManagerSettings(context.system)),
-    StreamMergerActor.name)*/
+    StreamMergerActor.name)
 
   val preparedWriteMessage = session.prepare(writeMessage)
   val preparedWriteInUse = session.prepare(writeInUse)
@@ -70,14 +78,38 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
       .zip(messages)
       .map(aw => Try { SerializedAtomicWrite(
         aw._2.payload.head.persistenceId,
-        aw._2.payload.map(pr => Serialized(aw._1, pr.sequenceNr, persistentToByteBuffer(pr))))
+        aw._2.payload.map(pr => Serialized(aw._1, pr.sequenceNr, aw._2.payload.head.persistenceId, persistentToByteBuffer(pr))))
       })
     journalSequenceNr = newJournalSequenceNr
 
     val result = serialized.map(a => a.map(_ => ()))
 
-    val byPersistenceId = serialized.collect({ case Success(caw) => caw }).groupBy(_.persistenceId).values
-    val boundStatements = byPersistenceId.map(statementGroup)
+    val byPersistenceId = serialized
+      .collect({ case Success(caw) => caw })
+      .groupBy(_.persistenceId)
+      // .values
+      .mapValues(_.flatMap(_.payload))
+      // .map(_.flatMap(_.payload))
+
+    val boundJournalEntry: (Serialized, Long) => BoundStatement =
+      (entry, maxPnr) => preparedWriteMessage.bind(
+        journalId,
+        maxPnr: JLong,
+        entry.journalSequenceNr: JLong,
+        entry.persistenceId,
+        entry.sequenceNr: JLong,
+        entry.serialized)
+
+    writeBatch[String, Serialized](
+      byPersistenceId,
+      _._2.head.journalSequenceNr,
+      _._2.last.journalSequenceNr,
+      boundJournalEntry,
+      _._2.head.persistenceId,
+      Some((persistenceId, minPnr) => preparedWriteInUse.bind(journalId, minPnr: JLong)))
+      .map(_.to[scala.collection.immutable.Seq])
+
+    /*val boundStatements = byPersistenceId.map(statementGroup)
 
     val batchStatements = boundStatements.map({ unit =>
       executeBatch(batch => unit.foreach(batch.add))
@@ -89,10 +121,10 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
       case Failure(e) => promise.failure(e)
     }
 
-    promise.future
+    promise.future*/
   }
 
-  private def statementGroup(atomicWrites: Seq[SerializedAtomicWrite]): Seq[BoundStatement] = {
+ /* private def statementGroup(atomicWrites: Seq[SerializedAtomicWrite]): Seq[BoundStatement] = {
     val firstJournalSequenceNr = atomicWrites.head.payload.head.journalSequenceNr
     val lastJournalSequenceNr = atomicWrites.last.payload.last.journalSequenceNr
 
@@ -112,7 +144,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     // keep going when they encounter it
     if (partitionNew(firstJournalSequenceNr) && minPnr != maxPnr) writes :+ preparedWriteInUse.bind(journalId, minPnr: JLong)
     else writes
-  }
+  }*/
 
   // TODO: FIX
   override def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] =
@@ -130,18 +162,18 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
     toSequenceNr: Long,
     max: Long)(recoveryCallback: (PersistentRepr) => Unit): Future[Unit] = Future(())
 
-  private def executeBatch(body: BatchStatement ⇒ Unit, retries: Option[Int] = None): Future[Unit] = {
+  /*private def executeBatch(body: BatchStatement ⇒ Unit, retries: Option[Int] = None): Future[Unit] = {
     val batch = new BatchStatement().setConsistencyLevel(writeConsistency).asInstanceOf[BatchStatement]
     retries.foreach(times => batch.setRetryPolicy(new LoggingRetryPolicy(new FixedRetryPolicy(times))))
     body(batch)
     session.executeAsync(batch).map(_ => ())
-  }
+  }*/
 
-  def partitionNr(sequenceNr: Long): Long =
-    (sequenceNr - 1L) / targetPartitionSize
+  /*def partitionNr(sequenceNr: Long): Long =
+    (sequenceNr - 1L) / targetPartitionSize*/
 
-  private def partitionNew(sequenceNr: Long): Boolean =
-    (sequenceNr - 1L) % targetPartitionSize == 0L
+  /*private def partitionNew(sequenceNr: Long): Boolean =
+    (sequenceNr - 1L) % targetPartitionSize == 0L */
 
   private def minSequenceNr(partitionNr: Long): Long =
     partitionNr * targetPartitionSize + 1
@@ -149,9 +181,9 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   private def persistentToByteBuffer(p: PersistentRepr): ByteBuffer =
     ByteBuffer.wrap(serialization.serialize(p).get)
 
-  def persistentFromByteBuffer(b: ByteBuffer): PersistentRepr = {
+  /*def persistentFromByteBuffer(b: ByteBuffer): PersistentRepr = {
     serialization.deserialize(Bytes.getArray(b), classOf[PersistentRepr]).get
-  }
+  }*/
 
   override def postStop(): Unit = {
     session.close()
@@ -159,7 +191,7 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   }
 
   private case class SerializedAtomicWrite(persistenceId: String, payload: Seq[Serialized])
-  private case class Serialized(journalSequenceNr: Long, sequenceNr: Long, serialized: ByteBuffer)
+  private case class Serialized(journalSequenceNr: Long, sequenceNr: Long, persistenceId: String, serialized: ByteBuffer)
   private case class PartitionInfo(partitionNr: Long, minSequenceNr: Long, maxSequenceNr: Long)
 }
 
