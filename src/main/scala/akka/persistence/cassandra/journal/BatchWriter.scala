@@ -15,65 +15,58 @@ trait BatchWriter {
 
   implicit def executionContext: ExecutionContext
 
-  def writeBatchSingle[G, T](data: (G, Seq[T]), boundStatement: T => BoundStatement) =
-    executeBatches(Seq(data._2.map(boundStatement)))
+  def writeBatchSingle[G, T](data: (G, Seq[T]), boundStatement: (G, Seq[T]) => Seq[BoundStatement]) =
+    executeBatches(Seq(boundStatement(data._1, data._2)))
 
   def writeBatch[G, T](
       data: Map[G, Seq[T]],
-      firstInBatch: ((G, Seq[T])) => Long,
-      lastInBatch: ((G, Seq[T])) => Long,
-      boundStatement: (T, Long) => BoundStatement,
-      partitionKey: ((G, Seq[T])) => String,
-      writeInUse: Option[(String, Long) => BoundStatement]): Future[Seq[Try[Unit]]] = {
+      boundStatement: (G, Seq[T]) => Seq[BoundStatement],
+      sequenceNr: T => Long,
+      writeInUse: (G, Long) => BoundStatement): Future[Seq[Try[Unit]]] = {
 
-    val boundStatements =
-      data.map(x => statementGroup(x, firstInBatch, lastInBatch, boundStatement, partitionKey, writeInUse))
+    val boundStatements = data.map(statementGroup(_, boundStatement, sequenceNr, writeInUse))
 
     executeBatches(boundStatements)
   }
 
   private[this] def statementGroup[G, T](
       atomicWrites: (G, Seq[T]),
-      firstInBatch: ((G, Seq[T])) => Long,
-      lastInBatch: ((G, Seq[T])) => Long,
-      boundStatement: (T, Long) => BoundStatement,
-      partitionKey: ((G, Seq[T])) => String,
-      writeInUse: Option[(String, Long) => BoundStatement]): Seq[BoundStatement] = {
+      boundStatement: (G, Seq[T]) => Seq[BoundStatement],
+      sequenceNr: T => Long,
+      writeInUse: (G, Long) => BoundStatement): Seq[BoundStatement] = {
 
-    val firstSequenceNr = firstInBatch(atomicWrites)
-    val lastSequenceNr = lastInBatch(atomicWrites)
+    val firstSequenceNr = sequenceNr(atomicWrites._2.head)
+    val lastSequenceNr = sequenceNr(atomicWrites._2.last)
 
-    val maxPnr = partitionNr(firstSequenceNr)
-    val minPnr = partitionNr(lastSequenceNr)
-    val persistenceId: String = partitionKey(atomicWrites)
-    val all = atomicWrites._2
+    val maxPnr = partitionNr(lastSequenceNr)
+    val minPnr = partitionNr(firstSequenceNr)
 
     // reading assumes sequence numbers are in the right partition or partition + 1
     // even if we did allow this it would perform terribly as large C* batches are not good
-    require(maxPnr - minPnr <= 1, "Do not support AtomicWrites that span 3 partitions. Keep AtomicWrites <= max partition size.")
+    require(maxPnr - minPnr <= 1,
+      "Do not support AtomicWrites that span 3 partitions. Keep AtomicWrites <= max partition size.")
 
-    val writes: Seq[BoundStatement] = all.map(boundStatement(_, maxPnr))
+    val writes: Seq[BoundStatement] = boundStatement(atomicWrites._1, atomicWrites._2)
 
     // in case we skip an entire partition we want to make sure the empty partition has in in-use flag so scans
     // keep going when they encounter it
-    writeInUse match {
-      case Some(write) =>
-        if (partitionNew(firstSequenceNr) && minPnr != maxPnr) writes :+ write(persistenceId, minPnr)
-        else writes
-      case None =>
-        writes
-    }
+    if (partitionNew(firstSequenceNr) && minPnr != maxPnr) writes :+ writeInUse(atomicWrites._1, minPnr)
+    else writes
   }
 
   private[this] def executeBatches(
       boundStatements: Iterable[Seq[BoundStatement]]): Future[Seq[Try[Unit]]] = {
+
+    val result = boundStatements.flatten.toSeq.map(_ => Try(()))
+
     val batchStatements = boundStatements.map({ unit =>
       executeBatch(batch => unit.foreach(batch.add))
     })
+
     val promise = Promise[Seq[Try[Unit]]]()
 
     Future.sequence(batchStatements).onComplete {
-      case Success(_) => promise.complete(Success(Seq()))
+      case Success(_) => promise.complete(Success(result))
       case Failure(e) => promise.failure(e)
     }
 
@@ -87,7 +80,7 @@ trait BatchWriter {
     session.executeAsync(batch).map(_ => ())
   }
 
-  private[this] def partitionNr(sequenceNr: Long): Long =
+  def partitionNr(sequenceNr: Long): Long =
     (sequenceNr - 1L) / config.targetPartitionSize
 
   private[this] def partitionNew(sequenceNr: Long): Boolean =

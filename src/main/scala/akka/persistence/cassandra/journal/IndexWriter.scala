@@ -16,19 +16,24 @@ trait IndexWriter extends CassandraStatements with BatchWriter {
   def writeIndexProgress(stream: Seq[JournalEntry]): Unit = {
     val byPersistenceId = stream.groupBy(_.persistenceId)
 
-    val boundJournalEntry: (JournalEntry, Long) => BoundStatement =
-      (entry, maxPnr) => preparedWriteMessage.bind(
-        entry.persistenceId.id,
-        maxPnr: JLong,
-        entry.sequenceNr: JLong,
-        entry.serialized)
+    val boundJournalEntries: (PersistenceId, Seq[JournalEntry]) => Seq[BoundStatement] =
+      (persistenceId, entries) => {
+
+        val maxPnr = partitionNr(entries.head.sequenceNr)
+
+        entries.map{ e =>
+          preparedWriteMessage.bind(
+            persistenceId.id,
+            maxPnr: JLong,
+            e.sequenceNr: JLong,
+            e.serialized)
+        }
+      }
 
     writeBatch[PersistenceId, JournalEntry](
       byPersistenceId,
-      _._2.head.sequenceNr,
-      _._2.last.sequenceNr,
-      boundJournalEntry,
-      x => x._2.head.persistenceId.id,
-      Some((persistenceId, minPnr) => preparedWriteInUse.bind(persistenceId, minPnr: JLong)))
+      boundJournalEntries,
+      _.journalSequenceNr,
+      (persistenceId, minPnr) => preparedWriteInUse.bind(persistenceId.id, minPnr: JLong))
   }
 }

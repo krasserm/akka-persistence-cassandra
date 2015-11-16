@@ -24,19 +24,23 @@ trait ProgressWriter extends CassandraStatements with BatchWriter {
 
     // TODO: The two progress updates are not batched.
     // TODO: Verify its ok.
-    val boundJournalIdProgress: ((JournalId, Long)) => BoundStatement = journalId =>
-        preparedWriteJournalIdProgress.bind(0: JInt, journalId._1.id, journalId._2: JLong)
+    val boundJournalIdProgress: (Int, Seq[(JournalId, Long)]) => Seq[BoundStatement] =
+      (partitionKey, journalIds) => journalIds.map { e =>
+        preparedWriteJournalIdProgress
+          .bind(partitionKey: JInt, e._1.id, e._2: JLong)
+      }
 
-    // TODO: We don't need subpartitioning here. Fix the method.
-    writeBatchSingle[String, (JournalId, Long)](
-      "" -> journalIdIdProgress.toList, boundJournalIdProgress)
+    writeBatchSingle[Int, (JournalId, Long)](
+      0 -> journalIdIdProgress.toList, boundJournalIdProgress)
 
-    val boundPersistenceIdProgress: ((PersistenceId, Long)) => BoundStatement = persistenceId =>
+    val boundPersistenceIdProgress: (Int, Seq[(PersistenceId, Long)]) => Seq[BoundStatement] =
+      (partitionKey, persistenceIds) => persistenceIds.map{ e =>
         preparedWritePersistenceIdProgress
-          .bind(0: JInt, persistenceId._1.id, persistenceId._2: JLong)
+          .bind(partitionKey: JInt, e._1.id, e._2: JLong)
+      }
 
-    writeBatchSingle[String, (PersistenceId, Long)](
-      "" -> persistenceIdProgress.toList, boundPersistenceIdProgress)
+    writeBatchSingle[Int, (PersistenceId, Long)](
+      0 -> persistenceIdProgress.toList, boundPersistenceIdProgress)
   }
 
   def readPersistenceIdProgress(): Progress[PersistenceId] = {
