@@ -28,6 +28,9 @@ class CassandraJournal extends AsyncWriteJournal with CassandraRecovery with Cas
   import config._
 
   val cluster = clusterBuilder.build
+  if (logSlowQuery) {
+    cluster.register(QueryLogger.builder(cluster).withConstantThreshold(slowQueryTime).build())
+  }
   val session = cluster.connect()
 
   case class MessageId(persistenceId: String, sequenceNr: Long)

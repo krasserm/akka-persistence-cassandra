@@ -26,11 +26,14 @@ scalacOptions ++= Seq(
 parallelExecution in Test := false
 
 libraryDependencies ++= Seq(
-  "com.datastax.cassandra"  % "cassandra-driver-core"             % "2.1.5",
+  "com.datastax.cassandra"  % "cassandra-driver-core"             % "2.1.8",
   "com.typesafe.akka"      %% "akka-persistence"                  % "2.4.0",
   "com.typesafe.akka"      %% "akka-persistence-tck"              % "2.4.0"      % "test",
   "org.scalatest"          %% "scalatest"                         % "2.1.4"      % "test",
-  "org.cassandraunit"       % "cassandra-unit"                    % "2.1.9.2"    % "test"
+  "org.cassandraunit"       % "cassandra-unit"                    % "2.1.9.2"    % "test",
+  "log4j"                   % "log4j"                             % "1.2.17"     % "test",
+  "org.slf4j"               % "slf4j-log4j12"                     % "1.7.5"      % "test",
+  "com.datastax.cassandra"  % "cassandra-driver-core"             % "2.1.8"      % "test" classifier "tests"
 )
 
 credentials += Credentials(

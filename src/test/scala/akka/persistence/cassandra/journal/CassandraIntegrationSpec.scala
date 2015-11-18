@@ -2,6 +2,9 @@ package akka.persistence.cassandra.journal
 
 import java.util.UUID
 
+import com.datastax.driver.core.MemoryAppender
+import org.apache.log4j.{Level, Logger}
+
 import scala.concurrent.duration._
 
 import akka.actor._
@@ -26,6 +29,8 @@ object CassandraIntegrationSpec {
       |cassandra-journal.max-result-size = 3
       |cassandra-journal.port = 9142
       |cassandra-snapshot-store.port = 9142
+      |cassandra-journal.log-slow-query = true
+      |cassandra-journal.slow-query-time = 1ms
     """.stripMargin)
 
   case class DeleteTo(snr: Long)
@@ -166,6 +171,23 @@ class CassandraIntegrationSpec extends TestKit(ActorSystem("test", config)) with
 
       processor2 ! "b"
       expectMsgAllOf("b", 17L, false)
+    }
+    "log cassandra queries if asked to" in {
+      val slowLog = Logger.getLogger("com.datastax.driver.core.QueryLogger.SLOW")
+      slowLog.setLevel(Level.DEBUG)
+      val log = new MemoryAppender()
+      slowLog.removeAllAppenders()
+      slowLog.addAppender(log)
+
+      val persistenceId = UUID.randomUUID().toString
+      val processor1 = system.actorOf(Props(classOf[ProcessorA], persistenceId, self))
+      processor1 ! "a-1"
+      expectMsgAllOf("a-1", 1, false)
+
+      val line = log.waitAndGet(10000)
+      line should include("Query too slow")
+      line should include("INSERT INTO akka.messages (persistence_id, partition_nr, sequence_nr, message, used)")
+      slowLog.removeAllAppenders()
     }
     "not replay range-deleted messages" in {
       val persistenceId = UUID.randomUUID().toString

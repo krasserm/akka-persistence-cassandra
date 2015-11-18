@@ -1,6 +1,7 @@
 package akka.persistence.cassandra
 
 import java.net.InetSocketAddress
+import java.util.concurrent.TimeUnit
 
 import akka.persistence.cassandra.compaction.CassandraCompactionStrategy
 import com.datastax.driver.core.policies.{TokenAwarePolicy, DCAwareRoundRobinPolicy}
@@ -67,6 +68,9 @@ class CassandraPluginConfig(config: Config) {
 
     clusterBuilder.withSSL(new SSLOptions(context,SSLOptions.DEFAULT_SSL_CIPHER_SUITES))
   }
+
+  val logSlowQuery = config.getBoolean("log-slow-query")
+  val slowQueryTime = config.getDuration("slow-query-time", TimeUnit.MILLISECONDS)
 }
 
 object CassandraPluginConfig {
