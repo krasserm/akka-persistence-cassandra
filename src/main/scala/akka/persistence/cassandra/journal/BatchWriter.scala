@@ -38,8 +38,8 @@ trait BatchWriter {
     val firstSequenceNr = sequenceNr(atomicWrites._2.head)
     val lastSequenceNr = sequenceNr(atomicWrites._2.last)
 
-    val maxPnr = partitionNr(lastSequenceNr)
     val minPnr = partitionNr(firstSequenceNr)
+    val maxPnr = partitionNr(lastSequenceNr)
 
     // reading assumes sequence numbers are in the right partition or partition + 1
     // even if we did allow this it would perform terribly as large C* batches are not good

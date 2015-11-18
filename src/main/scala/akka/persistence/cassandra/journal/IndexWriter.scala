@@ -19,7 +19,7 @@ trait IndexWriter extends CassandraStatements with BatchWriter {
     val boundJournalEntries: (PersistenceId, Seq[JournalEntry]) => Seq[BoundStatement] =
       (persistenceId, entries) => {
 
-        val maxPnr = partitionNr(entries.head.sequenceNr)
+        val maxPnr = partitionNr(entries.last.sequenceNr)
 
         entries.map{ e =>
           preparedWriteMessage.bind(

@@ -67,25 +67,25 @@ class CassandraJournal
   override def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     // we need to preserve the order / size of this sequence even though we don't map
     // AtomicWrites 1:1 with a C* insert
-    val newJournalSequenceNr = journalSequenceNr + messages.size
+
+    val flattenedMessages = messages.flatMap(_.payload)
+
+    val newJournalSequenceNr = journalSequenceNr + flattenedMessages.size
 
     val serialized = (journalSequenceNr to newJournalSequenceNr)
-      .zip(messages)
-      .map(aw => Try { SerializedAtomicWrite(
-        aw._2.payload.head.persistenceId,
-        aw._2.payload.map(pr => Serialized(aw._1, pr.sequenceNr, aw._2.payload.head.persistenceId, persistentToByteBuffer(pr))))
+      .zip(flattenedMessages)
+      .map(aw => Try {
+        Serialized(aw._1, aw._2.sequenceNr, aw._2.persistenceId, persistentToByteBuffer(aw._2))
       })
     journalSequenceNr = newJournalSequenceNr
 
     val byPersistenceId = serialized
       .collect({ case Success(caw) => caw })
-      .groupBy(_.persistenceId)
-      .mapValues(_.flatMap(_.payload))
 
     val boundJournalEntries: (String, scala.Seq[Serialized]) => scala.Seq[BoundStatement] =
       (persistenceId, entries) => {
 
-        val maxPnr = partitionNr(entries.head.sequenceNr)
+        val maxPnr = partitionNr(entries.last.journalSequenceNr)
 
         entries.map{ e =>
           preparedWriteMessage.bind(
@@ -99,9 +99,9 @@ class CassandraJournal
       }
 
     writeBatch[String, Serialized](
-      byPersistenceId,
+      Map(journalId -> byPersistenceId),
       boundJournalEntries,
-      _.sequenceNr,
+      _.journalSequenceNr,
       (persistenceId, minPnr) => preparedWriteInUse.bind(journalId, minPnr: JLong))
       .map(_.to[scala.collection.immutable.Seq])
   }
