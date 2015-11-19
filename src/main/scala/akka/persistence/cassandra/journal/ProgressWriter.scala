@@ -22,8 +22,6 @@ trait ProgressWriter extends CassandraStatements with BatchWriter {
       journalIdIdProgress: Progress[JournalId],
       persistenceIdProgress: Progress[PersistenceId]): Unit = {
 
-    // TODO: The two progress updates are not batched.
-    // TODO: Verify its ok.
     val boundJournalIdProgress: (Int, Seq[(JournalId, Long)]) => Seq[BoundStatement] =
       (partitionKey, journalIds) => journalIds.map { e =>
         preparedWriteJournalIdProgress

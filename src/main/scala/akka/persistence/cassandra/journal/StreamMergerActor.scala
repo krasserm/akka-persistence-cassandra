@@ -117,18 +117,8 @@ class StreamMergerActor(
       val nextState =
         mergeResult match {
           case MergeFailure(_, _, _, un) =>
-            println("UNMERGED:")
-            println(un)
             merging(journalIdProgress, persistenceIdProgress, step + 50l)
           case MergeSuccess(newJournalIdProgress, newPersistenceIdProgress, mergedStream) =>
-            println("MERGE:")
-            println("JournalIdProgress:")
-            println(newJournalIdProgress)
-            println("PersistenceIdProgress:")
-            println(newPersistenceIdProgress)
-            println("MergedStream:")
-            println(mergedStream)
-
             writeIndexProgress(mergedStream)
             writeProgress(newJournalIdProgress, newPersistenceIdProgress)
             merging(newJournalIdProgress, newPersistenceIdProgress, step)
