@@ -36,8 +36,7 @@ trait CassandraStatements {
         properties map<text,text>
       )
    """
-
-  // TODO: TEST UPSERT AND SET CLUST COLS
+  
   def createPersistenceIdProgressTable = s"""
       CREATE TABLE IF NOT EXISTS ${persistenceIdProgressTableName} (
         id int,
