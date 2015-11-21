@@ -5,6 +5,7 @@ import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 
 import akka.persistence.cassandra._
+import akka.persistence.journal.AsyncWriteJournal
 import com.datastax.driver.core.policies.LoggingRetryPolicy
 import com.datastax.driver.core.{Session, BatchStatement, BoundStatement}
 
@@ -57,7 +58,7 @@ trait BatchWriter {
   private[this] def executeBatches(
       boundStatements: Iterable[Seq[BoundStatement]]): Future[Seq[Try[Unit]]] = {
 
-    val result = boundStatements.flatten.toSeq.map(_ => Try(()))
+    val result = boundStatements.flatten.toSeq.map(_ => AsyncWriteJournal.successUnit)
 
     val batchStatements = boundStatements.map({ unit =>
       executeBatch(batch => unit.foreach(batch.add))

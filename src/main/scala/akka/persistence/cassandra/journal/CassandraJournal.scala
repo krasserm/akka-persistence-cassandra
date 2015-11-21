@@ -79,8 +79,7 @@ class CassandraJournal
       })
     journalSequenceNr = newJournalSequenceNr
 
-    val byPersistenceId = serialized
-      .collect({ case Success(caw) => caw })
+    val byPersistenceId = serialized.collect{ case Success(caw) => caw }
 
     val boundJournalEntries: (String, scala.Seq[Serialized]) => scala.Seq[BoundStatement] =
       (persistenceId, entries) => {
