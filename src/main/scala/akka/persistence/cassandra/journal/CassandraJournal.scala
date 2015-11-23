@@ -26,7 +26,7 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
 
   import config._
 
-  val session = connect()
+  val session = ClusterBuilder.cluster(config)
 
   case class MessageId(persistenceId: String, sequenceNr: Long)
 
@@ -49,10 +49,6 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
   val preparedSelectHighestSequenceNr = session.prepare(selectHighestSequenceNr).setConsistencyLevel(readConsistency)
   val preparedSelectDeletedTo = session.prepare(selectDeletedTo).setConsistencyLevel(readConsistency)
   val preparedInsertDeletedTo = session.prepare(insertDeletedTo).setConsistencyLevel(writeConsistency)
-
-  private def connect(): Session = {
-    retry(config.connectionRetries + 1, config.connectionRetryDelay.toMillis)(clusterBuilder.build().connect())
-  }
   
   def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     // we need to preserve the order / size of this sequence even though we don't map

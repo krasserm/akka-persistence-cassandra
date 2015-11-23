@@ -2,7 +2,7 @@ package akka.persistence.cassandra.compaction
 
 import java.util.concurrent.TimeUnit
 
-import akka.persistence.cassandra.{CassandraPluginConfig, CassandraLifecycle}
+import akka.persistence.cassandra.{ClusterBuilder, CassandraPluginConfig, CassandraLifecycle}
 import com.datastax.driver.core.{Session, Cluster}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{MustMatchers, WordSpec}
@@ -38,16 +38,13 @@ class CassandraCompactionStrategySpec extends WordSpec with MustMatchers with Ca
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-
-    cluster = clusterBuilder.build()
-    session = cluster.connect()
-
+    session = ClusterBuilder.cluster(cassandraPluginConfig)
     session.execute("CREATE KEYSPACE IF NOT EXISTS testKeyspace WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 }")
   }
 
   override protected def afterAll(): Unit = {
     session.close()
-    cluster.close()
+    session.getCluster.close()
 
     super.afterAll()
   }
