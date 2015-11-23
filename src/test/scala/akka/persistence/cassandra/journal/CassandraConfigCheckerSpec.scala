@@ -4,7 +4,7 @@ import java.util.concurrent.Executors
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill, Props}
 import akka.persistence._
-import akka.persistence.cassandra.{CassandraLifecycle, CassandraPluginConfig}
+import akka.persistence.cassandra.{ClusterBuilder, CassandraLifecycle, CassandraPluginConfig}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.datastax.driver.core.Session
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
@@ -17,6 +17,7 @@ import scala.util.{Failure, Success, Try}
 object CassandraConfigCheckerSpec {
   val config = ConfigFactory.parseString(
     """
+      |akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
       |akka.persistence.snapshot-store.plugin = "cassandra-snapshot-store"
       |akka.persistence.journal.plugin = "cassandra-journal"
       |akka.persistence.journal.max-deletion-batch-size = 3
@@ -46,7 +47,7 @@ import akka.persistence.cassandra.journal.CassandraConfigCheckerSpec._
 class CassandraConfigCheckerSpec extends TestKit(ActorSystem("test", config)) with ImplicitSender with WordSpecLike with MustMatchers with CassandraLifecycle {
 
   implicit val cfg = config.withFallback(system.settings.config).getConfig("cassandra-journal")
-  implicit val pluginConfig = new CassandraPluginConfig(cfg)
+  implicit val pluginConfig = new CassandraWriteJournalConfig(cfg)
 
   "CassandraConfigChecker" should {
 
@@ -119,7 +120,7 @@ class CassandraConfigCheckerSpec extends TestKit(ActorSystem("test", config)) wi
 
   def createCassandraConfigChecker(implicit pluginConfig: CassandraPluginConfig, cfg: Config): CassandraConfigChecker = {
 
-    val clusterSession = pluginConfig.clusterBuilder.build.connect()
+    val clusterSession = ClusterBuilder.cluster(pluginConfig).connect()
 
     new CassandraConfigChecker {
       override def session: Session = clusterSession

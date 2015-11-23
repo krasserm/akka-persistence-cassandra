@@ -1,7 +1,9 @@
 package akka.persistence.cassandra.journal
 
 import scala.collection.JavaConverters._
+import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.{Try, Failure, Success}
 import scala.util.control.Exception._
 
 import akka.actor.{Props, Actor}
@@ -46,13 +48,22 @@ object StreamMergerActor {
   * @param config CassandraJournalConfig.
   * @param session Session.
   */
-private class StreamMergerActor(
-  val config: CassandraJournalConfig,
-  session: Session) extends Actor with CassandraStatements {
+class StreamMergerActor(
+    override val config: CassandraJournalConfig,
+    override val session: Session)
+  extends Actor
+  with CassandraStatements
+  with IndexWriter
+  with ProgressWriter {
 
   import config._
 
   private[this] case object Continue
+
+  session.execute(createTable)
+
+  override implicit lazy val executionContext =
+    context.system.dispatchers.lookup(config.replayDispatcherId)
 
   val serialization = SerializationExtension(context.system)
 
@@ -72,60 +83,84 @@ private class StreamMergerActor(
   override def receive: Receive =
     merging(initialJournalIdProgress, initialPersistenceIdProgress, 50l)
 
+  private[this] def updateIndexAndProgress(
+      journalIdProgress: Progress[JournalId],
+      persistenceIdProgress: Progress[PersistenceId],
+      mergedStream: Seq[JournalEntry]): Future[Seq[Try[Unit]]] = {
+
+    for {
+      i <- writeIndexProgress(mergedStream)
+      p <- writeProgress(journalIdProgress, persistenceIdProgress)
+    } yield p
+  }
+
+  private[this] def nextState(
+      mergeResult: MergeResult,
+      journalIdProgress: Progress[JournalId],
+      persistenceIdProgress: Progress[PersistenceId],
+      step: Long): Future[Receive] =
+    mergeResult match {
+      case MergeFailure(_, _, _, _) =>
+        Future.successful(merging(journalIdProgress, persistenceIdProgress, step + 50l))
+      case MergeSuccess(newJournalIdProgress, newPersistenceIdProgress, mergedStream) =>
+        updateIndexAndProgress(newJournalIdProgress, newPersistenceIdProgress, mergedStream)
+          .map(_ => merging(newJournalIdProgress, newPersistenceIdProgress, step))
+    }
+
+  private[this] def independentStreams(updatedProgress: Progress[JournalId], step: Long) = {
+    updatedProgress
+      .map{ progress =>
+        Stream(
+          progress._1,
+          new JournalEntryIterator(
+            progress._1.id,
+            progress._2 + 1,
+            progress._2 + step + 1,
+            targetPartitionSize,
+            Long.MaxValue)(session, config))
+      }
+      .toSeq
+  }
+
   private[this] def merging(
     journalIdProgress: Progress[JournalId],
     persistenceIdProgress: Progress[PersistenceId],
     step: Long): Receive = {
 
     case Continue =>
-      val currentJournalIds =
-        catching(classOf[DriverException]).withTry(journalIds()).getOrElse(Seq())
-
-      val updatedProgress = currentJournalIds
-        .map{ journalId =>
-          (JournalId(journalId), journalIdProgress.getOrElse(JournalId(journalId), -1l))
-        }
-        .toMap
-
-      val independentStreams =
-        updatedProgress
-          .map{ progress =>
-          Stream(
-            progress._1,
-            new JournalEntryIterator(
-              progress._1.id,
-              progress._2 + 1,
-              progress._2 + step + 1,
-              targetPartitionSize,
-              Long.MaxValue)(session, config))
+      val next = for {
+        currentJournalIds <- journalIds()
+        updatedProgress = currentJournalIds
+          .map{ journalId =>
+            (JournalId(journalId), journalIdProgress.getOrElse(JournalId(journalId), -1l))
           }
-          .toSeq
+          .toMap
 
-      val mergeResult = merge(updatedProgress, persistenceIdProgress, independentStreams)
+        streams = independentStreams(updatedProgress, step)
+        mergeResult = merge(updatedProgress, persistenceIdProgress, streams)
+        nextState <- nextState(mergeResult, journalIdProgress, persistenceIdProgress, step)
+      } yield nextState
 
-      /**
-        * We now have a merged stream with the desired attributes or a stream that failed to merge.
-        * The index table and progress storage approach can be applied.
-        */
-      val nextState =
-        mergeResult match {
-          case MergeFailure(_, _, _, _) =>
-            merging(journalIdProgress, persistenceIdProgress, step + 50l)
-          case MergeSuccess(newJournalIdProgress, newPersistenceIdProgress, mergedStream) =>
-            merging(newJournalIdProgress, newPersistenceIdProgress, step)
-        }
-
-      context.become(nextState)
+      // Updating state asynchronously may result in multiple merges of the same segment,
+      // but the causality for persistenceId will be maintained.
+      next.onComplete{
+        case Success(s) => context.become(s)
+        case Failure(e) => // TODO: FIX
+      }
   }
 
   // TODO: FIX Recovery case
   private[this] def initialJournalIdProgress: Progress[JournalId] = Map[JournalId, Long]()
 
   // TODO: FIX Recovery case
-  private[this] def initialPersistenceIdProgress: Progress[PersistenceId] = Map[PersistenceId, Long]()
+  private[this] def initialPersistenceIdProgress: Progress[PersistenceId] =
+    readPersistenceIdProgress()
 
-  private[this] def journalIds(): Seq[String] =
-    session
-      .execute(preparedSelectDistinctJournalId.bind()).all().asScala.map(_.getString("journal_id"))
-      .distinct
+  private[this] def journalIds(): Future[Seq[String]] =
+    Future {
+      session
+        .execute(preparedSelectDistinctJournalId.bind()).all().asScala
+        .map(_.getString("journal_id"))
+        .distinct
+    }
 }

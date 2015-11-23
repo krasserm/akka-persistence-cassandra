@@ -14,7 +14,7 @@ class CassandraReadJournalSpec
   extends CassandraReadJournalSpecBase
   with ScalaFutures {
 
-  val javaQueries = PersistenceQuery(system)
+  lazy val javaQueries = PersistenceQuery(system)
     .getReadJournalFor(classOf[javadsl.CassandraReadJournal], scaladsl.CassandraReadJournal.Identifier)
 
   "Cassandra Read Journal Java API" must {

@@ -32,6 +32,7 @@ object StreamMerger {
   // TODO: Do we want to represent the result more genericly to be able to substitute different
   // TODO: stream merging approach?
   sealed trait MergeResult
+
   final case class MergeSuccess(
       journalIdProgress: Progress[JournalId],
       persistenceIdProgress: Progress[PersistenceId],

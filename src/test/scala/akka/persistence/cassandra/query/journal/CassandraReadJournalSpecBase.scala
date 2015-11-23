@@ -33,7 +33,8 @@ class CassandraReadJournalSpecBase
   with Matchers {
 
   implicit val mat = ActorMaterializer()(system)
-  val queries = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+  lazy val queries: CassandraReadJournal =
+    PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
   override protected def afterAll(): Unit = {
     Await.result(system.terminate(), Timeout(1.second).duration)
