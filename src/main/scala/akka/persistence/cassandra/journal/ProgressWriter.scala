@@ -7,6 +7,9 @@ import scala.collection.JavaConverters._
 import akka.persistence.cassandra.journal.StreamMerger._
 import com.datastax.driver.core.BoundStatement
 
+import scala.concurrent.Future
+import scala.util.Try
+
 trait ProgressWriter extends CassandraStatements with BatchWriter {
 
   session.execute(createJournalIdProgressTable)
@@ -20,7 +23,7 @@ trait ProgressWriter extends CassandraStatements with BatchWriter {
 
   def writeProgress(
       journalIdIdProgress: Progress[JournalId],
-      persistenceIdProgress: Progress[PersistenceId]): Unit = {
+      persistenceIdProgress: Progress[PersistenceId]): Future[Seq[Try[Unit]]] = {
 
     val boundJournalIdProgress: (Int, Seq[(JournalId, Long)]) => Seq[BoundStatement] =
       (partitionKey, journalIds) => journalIds.map { e =>

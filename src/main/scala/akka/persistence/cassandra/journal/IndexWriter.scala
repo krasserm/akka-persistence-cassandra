@@ -5,6 +5,9 @@ import java.lang.{Long => JLong}
 import akka.persistence.cassandra.journal.StreamMerger.{PersistenceId, JournalEntry}
 import com.datastax.driver.core.BoundStatement
 
+import scala.concurrent.Future
+import scala.util.Try
+
 trait IndexWriter extends CassandraStatements with BatchWriter {
 
   session.execute(createEventsByPersistenceIdTable)
@@ -13,7 +16,7 @@ trait IndexWriter extends CassandraStatements with BatchWriter {
   val preparedWriteInUse = session.prepare(writeEventsByPersistenceIdInUse)
 
   // TODO: Store progress of all persistenceJournals so we can resume?
-  def writeIndexProgress(stream: Seq[JournalEntry]): Unit = {
+  def writeIndexProgress(stream: Seq[JournalEntry]): Future[Seq[Try[Unit]]] = {
     val byPersistenceId = stream.groupBy(_.persistenceId)
 
     val boundJournalEntries: (PersistenceId, Seq[JournalEntry]) => Seq[BoundStatement] =
