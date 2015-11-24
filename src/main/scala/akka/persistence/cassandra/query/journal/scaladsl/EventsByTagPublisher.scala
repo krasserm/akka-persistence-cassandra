@@ -1,3 +1,4 @@
+/*
 package akka.persistence.cassandra.query.journal
 
 import akka.persistence.cassandra.query.EventsByTagFetcher
@@ -90,3 +91,4 @@ class EventsByTagPublisher(
     bucket.isEqual(tday) || bucket.isAfter(tday)
   }
 }
+*/
