@@ -19,8 +19,9 @@ trait CassandraStatements {
         persistence_id text,
         partition_nr bigint,
         sequence_nr bigint,
+        tag text,
         message blob,
-        PRIMARY KEY ((persistence_id, partition_nr), sequence_nr))
+        PRIMARY KEY ((persistence_id, partition_nr), sequence_nr, tag))
         WITH gc_grace_seconds =${config.gc_grace_seconds}
         AND compaction = ${config.tableCompactionStrategy.asCQL}
     """
@@ -33,7 +34,7 @@ trait CassandraStatements {
    """
 
   def writeMessage = s"""
-      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, message, used)
+      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, tag, message, used)
       VALUES (?, ?, ?, ?, true)
     """
 

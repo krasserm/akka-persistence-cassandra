@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 
 import akka.persistence._
 import akka.persistence.cassandra._
-import akka.persistence.journal.AsyncWriteJournal
+import akka.persistence.journal.{Tagged, AsyncWriteJournal}
 import akka.serialization.SerializationExtension
 import com.datastax.driver.core._
 import com.datastax.driver.core.exceptions.NoHostAvailableException
@@ -55,8 +55,16 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
     // AtomicWrites 1:1 with a C* insert
     val serialized = messages.map(aw => Try { SerializedAtomicWrite(
         aw.payload.head.persistenceId,
-        aw.payload.map(pr => Serialized(pr.sequenceNr, persistentToByteBuffer(pr))))
-    })
+        aw.payload.flatMap { pr =>
+          pr.payload match {
+            case Tagged(payload, tags) =>
+              tags.map(t => Serialized(pr.sequenceNr, Some(t), persistentToByteBuffer(pr)))
+            case payload =>
+              Seq(Serialized(pr.sequenceNr, None, persistentToByteBuffer(pr)))
+          }
+        }
+    )})
+
     val result = serialized.map(a => a.map(_ => ()))
 
     val byPersistenceId = serialized.collect({ case Success(caw) => caw }).groupBy(_.persistenceId).values
@@ -76,18 +84,18 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
   }
 
   private def statementGroup(atomicWrites: Seq[SerializedAtomicWrite]): Seq[BoundStatement] = {
-    val maxPnr = partitionNr(atomicWrites.last.payload.last.sequenceNr)
     val firstSeq = atomicWrites.head.payload.head.sequenceNr
     val minPnr = partitionNr(firstSeq)
     val persistenceId: String = atomicWrites.head.persistenceId
     val all = atomicWrites.flatMap(_.payload)
+    val maxPnr = partitionNr(atomicWrites.head.payload.head.sequenceNr + all.size)
 
     // reading assumes sequence numbers are in the right partition or partition + 1
     // even if we did allow this it would perform terribly as large C* batches are not good
     require(maxPnr - minPnr <= 1, "Do not support AtomicWrites that span 3 partitions. Keep AtomicWrites <= max partition size.")
 
     val writes: Seq[BoundStatement] = all.map { m =>
-      preparedWriteMessage.bind(persistenceId, maxPnr: JLong, m.sequenceNr: JLong, m.serialized)
+      preparedWriteMessage.bind(persistenceId, maxPnr: JLong, m.sequenceNr: JLong, m.tag, m.serialized)
     }
     // in case we skip an entire partition we want to make sure the empty partition has in in-use flag so scans
     // keep going when they encounter it
@@ -160,7 +168,7 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
   }
 
   private case class SerializedAtomicWrite(persistenceId: String, payload: Seq[Serialized])
-  private case class Serialized(sequenceNr: Long, serialized: ByteBuffer)
+  private case class Serialized(sequenceNr: Long, tag: Option[String], serialized: ByteBuffer)
   private case class PartitionInfo(partitionNr: Long, minSequenceNr: Long, maxSequenceNr: Long)
 }
 
