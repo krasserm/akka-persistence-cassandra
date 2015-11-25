@@ -11,6 +11,8 @@ class CassandraReadJournalSpec
   extends CassandraReadJournalSpecBase
   with ScalaFutures {
 
+  override def systemName: String = "ScalaCassandraReadJournalSpec"
+
   "Cassandra Read Journal Scala API" must {
     "start eventsByPersistenceId query" in {
       setup("a", 1)

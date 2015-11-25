@@ -6,6 +6,8 @@ import akka.stream.testkit.scaladsl.TestSink
 
 class EventsByPersistenceIdSpec extends CassandraReadJournalSpecBase {
 
+  override def systemName: String = "EventsByPersistenceIdSpec"
+
   "Cassandra query EventsByPersistenceId" must {
     "find existing events" in {
       val ref = setup("a", 3)

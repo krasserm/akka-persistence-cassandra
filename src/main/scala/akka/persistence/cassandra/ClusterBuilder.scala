@@ -1,7 +1,7 @@
 package akka.persistence.cassandra
 
 import com.datastax.driver.core.policies.{DCAwareRoundRobinPolicy, TokenAwarePolicy}
-import com.datastax.driver.core.{Session, Cluster, QueryOptions, SSLOptions}
+import com.datastax.driver.core._
 
 import scala.collection.JavaConverters._
 
@@ -23,7 +23,7 @@ object ClusterBuilder {
     if (config.hasPath("local-datacenter")) {
       clusterBuilder.withLoadBalancingPolicy(
         new TokenAwarePolicy(
-          new DCAwareRoundRobinPolicy(config.getString("local-datacenter"))
+          DCAwareRoundRobinPolicy.builder.withLocalDc(config.getString("local-datacenter")).build()
         )
       )
     }
@@ -40,7 +40,7 @@ object ClusterBuilder {
         keyStorePath,
         keyStorePW)
 
-      clusterBuilder.withSSL(new SSLOptions(context, SSLOptions.DEFAULT_SSL_CIPHER_SUITES))
+      clusterBuilder.withSSL(JdkSSLOptions.builder.withSSLContext(context).build())
     }
 
     retry(cassandraPluginConfig.connectionRetries + 1, cassandraPluginConfig.connectionRetryDelay.toMillis)(clusterBuilder.build().connect())

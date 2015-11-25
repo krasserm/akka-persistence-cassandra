@@ -1,23 +1,24 @@
 package akka.persistence.cassandra.journal
 
-import java.lang.{Long => JLong}
+import java.lang.{ Long => JLong }
 import java.nio.ByteBuffer
+
+import scala.collection.JavaConversions._
+import scala.collection.immutable.Seq
+import scala.concurrent._
+import scala.math.min
+import scala.util.{ Success, Failure, Try }
+import scala.util.{ Failure, Success, Try }
 
 import akka.persistence._
 import akka.persistence.cassandra._
 import akka.persistence.journal.{Tagged, AsyncWriteJournal}
 import akka.serialization.SerializationExtension
 import com.datastax.driver.core._
-import com.datastax.driver.core.exceptions.NoHostAvailableException
+import com.datastax.driver.core.policies.{ LoggingRetryPolicy, RetryPolicy }
 import com.datastax.driver.core.policies.RetryPolicy.RetryDecision
-import com.datastax.driver.core.policies.{LoggingRetryPolicy, RetryPolicy}
-import com.datastax.driver.core.utils.Bytes
+import com.datastax.driver.core.utils.{UUIDs, Bytes}
 import com.typesafe.config.Config
-
-import scala.collection.immutable.Seq
-import scala.concurrent._
-import scala.math.min
-import scala.util.{Failure, Success, Try}
 
 class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraRecovery with CassandraConfigChecker with CassandraStatements {
 
@@ -52,10 +53,12 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
   val preparedSelectDeletedTo = session.prepare(selectDeletedTo).setConsistencyLevel(readConsistency)
   val preparedInsertDeletedTo = session.prepare(insertDeletedTo).setConsistencyLevel(writeConsistency)
   
+
   def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
     // we need to preserve the order / size of this sequence even though we don't map
     // AtomicWrites 1:1 with a C* insert
-    val serialized = messages.map(aw => Try { SerializedAtomicWrite(
+    val serialized = messages.map(aw => Try {
+      SerializedAtomicWrite(
         aw.payload.head.persistenceId,
         aw.payload.flatMap { pr =>
           pr.payload match {
@@ -73,7 +76,7 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
     val boundStatements = byPersistenceId.map(statementGroup)
 
     val batchStatements = boundStatements.map({ unit =>
-        executeBatch(batch => unit.foreach(batch.add))
+      executeBatch(batch => unit.foreach(batch.add))
     })
     val promise = Promise[Seq[Try[Unit]]]()
 
@@ -97,7 +100,7 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
     require(maxPnr - minPnr <= 1, "Do not support AtomicWrites that span 3 partitions. Keep AtomicWrites <= max partition size.")
 
     val writes: Seq[BoundStatement] = all.map { m =>
-      preparedWriteMessage.bind(persistenceId, maxPnr: JLong, m.sequenceNr: JLong, m.tag, m.serialized)
+      preparedWriteMessage.bind(persistenceId, maxPnr: JLong, m.sequenceNr: JLong, m.tag, UUIDs.timeBased(), m.serialized)
     }
     // in case we skip an entire partition we want to make sure the empty partition has in in-use flag so scans
     // keep going when they encounter it
@@ -114,8 +117,9 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
     val highestPartition = partitionNr(toSequenceNr) + 1 // may have been moved to the next partition
     val partitionInfos = (lowestPartition to highestPartition).map(partitionInfo(persistenceId, _, toSequenceNr))
 
-    partitionInfos.map( future => future.flatMap( pi => {
-      Future.sequence((pi.minSequenceNr to pi.maxSequenceNr).grouped(config.maxMessageBatchSize).map { group => {
+    partitionInfos.map(future => future.flatMap(pi => {
+      Future.sequence((pi.minSequenceNr to pi.maxSequenceNr).grouped(config.maxMessageBatchSize).map { group =>
+        {
           val delete = asyncDeleteMessages(pi.partitionNr, group map (MessageId(persistenceId, _)))
           delete.onFailure {
             case e => log.warning(s"Unable to complete deletes for persistence id ${persistenceId}, toSequenceNr ${toSequenceNr}. The plugin will continue to function correctly but you will need to manually delete the old messages.", e)
@@ -175,11 +179,15 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
 }
 
 class FixedRetryPolicy(number: Int) extends RetryPolicy {
-  def onUnavailable(statement: Statement, cl: ConsistencyLevel, requiredReplica: Int, aliveReplica: Int, nbRetry: Int): RetryDecision = retry(cl, nbRetry)
-  def onWriteTimeout(statement: Statement, cl: ConsistencyLevel, writeType: WriteType, requiredAcks: Int, receivedAcks: Int, nbRetry: Int): RetryDecision = retry(cl, nbRetry)
-  def onReadTimeout(statement: Statement, cl: ConsistencyLevel, requiredResponses: Int, receivedResponses: Int, dataRetrieved: Boolean, nbRetry: Int): RetryDecision = retry(cl, nbRetry)
+  override def onUnavailable(statement: Statement, cl: ConsistencyLevel, requiredReplica: Int, aliveReplica: Int, nbRetry: Int): RetryDecision = retry(cl, nbRetry)
+  override def onWriteTimeout(statement: Statement, cl: ConsistencyLevel, writeType: WriteType, requiredAcks: Int, receivedAcks: Int, nbRetry: Int): RetryDecision = retry(cl, nbRetry)
+  override def onReadTimeout(statement: Statement, cl: ConsistencyLevel, requiredResponses: Int, receivedResponses: Int, dataRetrieved: Boolean, nbRetry: Int): RetryDecision = retry(cl, nbRetry)
 
   private def retry(cl: ConsistencyLevel, nbRetry: Int): RetryDecision = {
     if (nbRetry < number) RetryDecision.retry(cl) else RetryDecision.rethrow()
   }
+
+  override def init(c: Cluster): Unit = ()
+  override def close(): Unit = ()
+
 }

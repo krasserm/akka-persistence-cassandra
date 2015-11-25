@@ -5,6 +5,8 @@ import akka.stream.testkit.scaladsl.TestSink
 
 class EventsByTagSpec extends CassandraReadJournalSpecBase {
 
+  override def systemName: String = "EventsByTagSpec"
+
   "Cassandra query EventsByTag" must {
     "find existing events" in {
       val ref = setup("a", 15)

@@ -30,10 +30,11 @@ object CassandraReadJournalSpecBase {
       event-adapter-bindings = {
           "java.lang.String" = test-tagger
       }
+    }
      """
 }
 
-class CassandraReadJournalSpecBase
+abstract class CassandraReadJournalSpecBase
   extends TestKit(ActorSystem("CassandraReadJournalSpecBase", ConfigFactory.parseString(CassandraReadJournalSpecBase.config)))
   with ImplicitSender
   with WordSpecLike

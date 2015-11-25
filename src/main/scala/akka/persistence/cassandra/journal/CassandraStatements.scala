@@ -19,6 +19,7 @@ trait CassandraStatements {
         persistence_id text,
         partition_nr bigint,
         sequence_nr bigint,
+        timestamp timeuuid,
         tag text,
         message blob,
         PRIMARY KEY ((persistence_id, partition_nr), sequence_nr, tag))
@@ -34,8 +35,8 @@ trait CassandraStatements {
    """
 
   def writeMessage = s"""
-      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, tag, message, used)
-      VALUES (?, ?, ?, ?, true)
+      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, tag, timestamp, message, used)
+      VALUES (?, ?, ?, ?, ?, ?, true)
     """
 
   def deleteMessage = s"""
