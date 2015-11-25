@@ -25,7 +25,7 @@ class CassandraSnapshotStore(cfg: Config) extends SnapshotStore with CassandraSt
   import config._
   import context.dispatcher
 
-  val session = connect()
+  val session = ClusterBuilder.cluster(config)
 
   if (config.keyspaceAutoCreate) {
     retry(config.keyspaceAutoCreateRetries) {
@@ -43,10 +43,6 @@ class CassandraSnapshotStore(cfg: Config) extends SnapshotStore with CassandraSt
 
   val preparedSelectSnapshotMetadataForDelete =
     session.prepare(selectSnapshotMetadata(limit = None)).setConsistencyLevel(readConsistency)
-    
-  private def connect(): Session = {
-    retry(config.connectionRetries + 1, config.connectionRetryDelay.toMillis)(clusterBuilder.build().connect())
-  }
 
   def loadAsync(persistenceId: String, criteria: SnapshotSelectionCriteria): Future[Option[SelectedSnapshot]] = for {
     mds <- Future(metadata(persistenceId, criteria).take(3).toVector)

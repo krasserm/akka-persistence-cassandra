@@ -1,0 +1,48 @@
+package akka.persistence.cassandra
+
+import com.datastax.driver.core.policies.{DCAwareRoundRobinPolicy, TokenAwarePolicy}
+import com.datastax.driver.core._
+
+import scala.collection.JavaConverters._
+
+object ClusterBuilder {
+
+  def cluster(cassandraPluginConfig: CassandraPluginConfig): Session = {
+    import cassandraPluginConfig._
+
+    val clusterBuilder: Cluster.Builder = Cluster.builder
+      .addContactPointsWithPorts(contactPoints.asJava)
+      .withQueryOptions(new QueryOptions().setFetchSize(fetchSize))
+
+    if (config.hasPath("authentication")) {
+      clusterBuilder.withCredentials(
+        config.getString("authentication.username"),
+        config.getString("authentication.password"))
+    }
+
+    if (config.hasPath("local-datacenter")) {
+      clusterBuilder.withLoadBalancingPolicy(
+        new TokenAwarePolicy(
+          DCAwareRoundRobinPolicy.builder.withLocalDc(config.getString("local-datacenter")).build()
+        )
+      )
+    }
+
+    if (config.hasPath("ssl")) {
+      val trustStorePath: String = config.getString("ssl.truststore.path")
+      val trustStorePW: String = config.getString("ssl.truststore.password")
+      val keyStorePath: String = config.getString("ssl.keystore.path")
+      val keyStorePW: String = config.getString("ssl.keystore.password")
+
+      val context = SSLSetup.constructContext(
+        trustStorePath,
+        trustStorePW,
+        keyStorePath,
+        keyStorePW)
+
+      clusterBuilder.withSSL(JdkSSLOptions.builder.withSSLContext(context).build())
+    }
+
+    retry(cassandraPluginConfig.connectionRetries + 1, cassandraPluginConfig.connectionRetryDelay.toMillis)(clusterBuilder.build().connect())
+  }
+}

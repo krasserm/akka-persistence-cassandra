@@ -19,8 +19,10 @@ trait CassandraStatements {
         persistence_id text,
         partition_nr bigint,
         sequence_nr bigint,
+        timestamp timeuuid,
+        tag text,
         message blob,
-        PRIMARY KEY ((persistence_id, partition_nr), sequence_nr))
+        PRIMARY KEY ((persistence_id, partition_nr), sequence_nr, tag))
         WITH gc_grace_seconds =${config.gc_grace_seconds}
         AND compaction = ${config.tableCompactionStrategy.asCQL}
     """
@@ -33,8 +35,8 @@ trait CassandraStatements {
    """
 
   def writeMessage = s"""
-      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, message, used)
-      VALUES (?, ?, ?, ?, true)
+      INSERT INTO ${tableName} (persistence_id, partition_nr, sequence_nr, tag, timestamp, message, used)
+      VALUES (?, ?, ?, ?, ?, ?, true)
     """
 
   def deleteMessage = s"""
@@ -88,7 +90,19 @@ trait CassandraStatements {
        INSERT INTO ${tableName} (persistence_id, partition_nr, used)
        VALUES(?, ?, true)
      """
-  
+
+  def createEventsByTagMaterializedView =
+    s"""
+       CREATE MATERIALIZED VIEW IF NOT EXISTS $eventsByTagViewName AS
+       SELECT tag, timestamp, persistence_id, partition_nr, sequence_nr, message
+       FROM $tableName
+       WHERE persistence_id IS NOT NULL AND partition_nr IS NOT NULL AND sequence_nr IS NOT NULL
+         AND tag IS NOT NULL AND timestamp IS NOT NULL AND timebucket IS NOT NULL
+       PRIMARY KEY (tag, timestamp, persistence_id, partition_nr, sequence_nr)
+       WITH CLUSTERING ORDER BY (timestamp ASC)
+    """
+
+  private def eventsByTagViewName = s"${config.keyspace}.${config.eventsByTagViewName}"
   private def tableName = s"${config.keyspace}.${config.table}"
   private def configTableName = s"${config.keyspace}.${config.configTable}"
   private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"

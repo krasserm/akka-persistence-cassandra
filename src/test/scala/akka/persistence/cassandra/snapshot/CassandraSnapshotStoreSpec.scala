@@ -1,11 +1,12 @@
 package akka.persistence.cassandra.snapshot
 
+import akka.persistence.cassandra.testkit.CassandraLauncher
 import java.lang.{ Long => JLong }
 import java.nio.ByteBuffer
 
 import akka.persistence._
 import akka.persistence.SnapshotProtocol._
-import akka.persistence.cassandra.CassandraLifecycle
+import akka.persistence.cassandra.{ClusterBuilder, CassandraLifecycle}
 import akka.persistence.snapshot.SnapshotStoreSpec
 import akka.testkit.TestProbe
 
@@ -14,36 +15,35 @@ import com.typesafe.config.ConfigFactory
 
 object CassandraSnapshotStoreConfiguration {
   lazy val config = ConfigFactory.parseString(
-    """
+    s"""
       |akka.persistence.journal.plugin = "cassandra-journal"
       |akka.persistence.snapshot-store.plugin = "cassandra-snapshot-store"
       |akka.test.single-expect-default = 10s
-      |cassandra-journal.port = 9142
-      |cassandra-snapshot-store.port = 9142
+      |cassandra-journal.port = ${CassandraLauncher.randomPort}
+      |cassandra-snapshot-store.port = ${CassandraLauncher.randomPort}
       |cassandra-snapshot-store.max-metadata-result-size = 2
     """.stripMargin)
 }
 
-class CassandraSnapshotStoreSpec extends SnapshotStoreSpec(CassandraSnapshotStoreConfiguration.config) with CassandraLifecycle {  
+class CassandraSnapshotStoreSpec extends SnapshotStoreSpec(CassandraSnapshotStoreConfiguration.config) with CassandraLifecycle {
 
   val storeConfig = new CassandraSnapshotStoreConfig(system.settings.config.getConfig("cassandra-snapshot-store"))
   val storeStatements = new CassandraStatements { def config = storeConfig }
 
-  var cluster: Cluster = _
   var session: Session = _
 
-  import storeConfig._
   import storeStatements._
+
+  override def systemName: String = "CassandraSnapshotStoreSpec"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    cluster = clusterBuilder.build()
-    session = cluster.connect()
+    session = ClusterBuilder.cluster(storeConfig)
   }
 
   override def afterAll(): Unit = {
     session.close()
-    cluster.close()
+    session.getCluster.close()
     super.afterAll()
   }
 
