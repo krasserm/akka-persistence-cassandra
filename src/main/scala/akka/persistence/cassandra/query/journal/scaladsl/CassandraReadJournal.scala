@@ -1,5 +1,9 @@
 package akka.persistence.cassandra.query.journal.scaladsl
 
+import java.util.UUID
+
+import com.datastax.driver.core.utils.UUIDs
+
 import scala.concurrent.duration.FiniteDuration
 
 import akka.actor.ExtendedActorSystem
@@ -9,7 +13,8 @@ import akka.persistence.query.scaladsl._
 import akka.stream.scaladsl.Source
 import com.typesafe.config.Config
 
-import akka.persistence.cassandra.query.journal.{CassandraReadJournalConfig, EventsByPersistenceIdPublisher}
+import akka.persistence.cassandra.query.journal.{EventsByTagPublisher,
+CassandraReadJournalConfig, EventsByPersistenceIdPublisher}
 
 object CassandraReadJournal {
   final val Identifier = "cassandra-query-journal"
@@ -64,7 +69,27 @@ class CassandraReadJournal(system: ExtendedActorSystem, config: Config)
       .named(name)
   }
 
-  override def eventsByTag(tag: String, offset: Long): Source[EventEnvelope, Unit] = ???
+  override def eventsByTag(tag: String, offset: Long): Source[EventEnvelope, Unit] =
+    eventsByTag(tag, offset, readJournalConfig.refreshInterval)
 
-  override def currentEventsByTag(tag: String, offset: Long): Source[EventEnvelope, Unit] = ???
+  override def currentEventsByTag(tag: String, offset: Long): Source[EventEnvelope, Unit] =
+    eventsByTag(tag, offset, None)
+
+  private[this] def eventsByTag(
+      tag: String,
+      offset: Long,
+      refreshInterval: Option[FiniteDuration]) = {
+    val name = s"eventsByTag-$tag"
+
+    Source.actorPublisher[EventEnvelope](
+      EventsByTagPublisher.props(
+        tag,
+        offset,
+        refreshInterval,
+        readJournalConfig.maxBufferSize,
+        session,
+        readJournalConfig))
+      .mapMaterializedValue(_ => ())
+      .named(name)
+  }
 }

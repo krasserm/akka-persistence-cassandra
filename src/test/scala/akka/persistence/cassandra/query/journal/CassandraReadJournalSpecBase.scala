@@ -1,5 +1,7 @@
 package akka.persistence.cassandra.query.journal
 
+import akka.persistence.journal.{Tagged, WriteEventAdapter}
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
@@ -21,7 +23,14 @@ object CassandraReadJournalSpecBase {
     cassandra-query-journal.port = 9142
     cassandra-query-journal.max-buffer-size = 10
     cassandra-query-journal.refresh-interval = 1s
-               """
+    cassandra-journal {
+      event-adapters {
+        test-tagger  = akka.persistence.cassandra.query.journal.TestTagger
+      }
+      event-adapter-bindings = {
+          "java.lang.String" = test-tagger
+      }
+     """
 }
 
 class CassandraReadJournalSpecBase
@@ -48,5 +57,15 @@ class CassandraReadJournalSpecBase
     }
 
     ref
+  }
+
+  class TestTagger extends WriteEventAdapter {
+
+    override def toJournal(event: Any): Any = event match {
+      case s: String => Tagged(event, Set("one", "two"))
+      case _ => event
+    }
+
+    override def manifest(event: Any): String = ""
   }
 }

@@ -11,6 +11,13 @@ trait CassandraReadStatements {
         sequence_nr <= ?
     """
 
+  def selectByTag = s"""
+      SELECT * FROM $eventsByTagViewName WHERE
+        tag = ? AND
+        timestamp >= ? AND
+        timestamp <= ?
+     """.stripMargin
+
   // TODO: THE BELOW WAS COPIED FROM CASSANDRASTATEMENTS
 
   def selectDeletedTo = s"""
@@ -24,6 +31,7 @@ trait CassandraReadStatements {
       partition_nr = ?
    """
 
+  private def eventsByTagViewName = s"${config.keyspace}.${config.eventsByTagViewName}"
   private def tableName = s"${config.keyspace}.${config.table}"
   private def metadataTableName = s"${config.keyspace}.${config.metadataTable}"
 }

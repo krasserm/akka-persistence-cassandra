@@ -35,9 +35,11 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
       session.execute(createKeyspace)
     }
   }
+
   session.execute(createTable)
   session.execute(createMetatdataTable)
   session.execute(createConfigTable)
+  session.execute(createEventsByTagMaterializedView)
 
   val persistentConfig: Map[String, String] = initializePersistentConfig
 

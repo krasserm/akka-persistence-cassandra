@@ -23,6 +23,8 @@ class CassandraPluginConfig(val config: Config) {
   val keyspace: String = config.getString("keyspace")
   val table: String = config.getString("table")
 
+  val eventsByTagViewName: String = config.getString("events-by-tag-view")
+
   val connectionRetries: Int = config.getInt("connect-retries")
   val connectionRetryDelay : FiniteDuration = config.getDuration("connect-retry-delay", TimeUnit.MILLISECONDS).millis
 }
