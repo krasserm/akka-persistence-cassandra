@@ -59,10 +59,10 @@ class CassandraPluginConfig(config: Config) {
   }
 
   if (config.hasPath("ssl")) {
-    val trustStorePath: String = config.getString("ssl.truststore.path")
-    val trustStorePW: String = config.getString("ssl.truststore.password")
-    val keyStorePath: String = config.getString("ssl.keystore.path")
-    val keyStorePW: String = config.getString("ssl.keystore.password")
+    val trustStorePath: Option[String] = config.getOptionalString("ssl.truststore.path")
+    val trustStorePW: Option[String] = config.getOptionalString("ssl.truststore.password")
+    val keyStorePath: Option[String] = config.getOptionalString("ssl.keystore.path")
+    val keyStorePW: Option[String] = config.getOptionalString("ssl.keystore.password")
     
     val context = SSLSetup.constructContext(
       trustStorePath,
@@ -141,5 +141,10 @@ object CassandraPluginConfig {
   def validateTableName(tableName: String): String = tableName.matches(keyspaceNameRegex) match {
     case true => tableName
     case false => throw new IllegalArgumentException(s"Invalid table name. A table name may 32 or fewer alpha-numeric characters and underscores. Value was: $tableName")
+  }
+
+  //From: https://github.com/typesafehub/config#how-to-handle-defaults
+  implicit class RichConfig(val underlying: Config) extends AnyVal {
+    def getOptionalString(path: String): Option[String] = if (underlying.hasPath(path)) Some(underlying.getString(path)) else None
   }
 }

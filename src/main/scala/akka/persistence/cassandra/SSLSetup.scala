@@ -1,29 +1,25 @@
 package akka.persistence.cassandra
 
-import java.io.{File, FileInputStream, InputStream}
+import java.io.{File, FileInputStream}
 import java.security.{KeyStore, SecureRandom}
-import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory, TrustManager, KeyManager}
+import scala.collection.immutable.Seq
 
 private [cassandra] object SSLSetup {
   /**
    * creates a new SSLContext
    */
   def constructContext(
-    trustStorePath:String,
-    trustStorePW:String,
-    keyStorePath:String,
-    keyStorePW:String):SSLContext = {
-
-    val tmf = loadTrustManagerFactory(trustStorePath, trustStorePW)
-    val kmf = loadKeyManagerFactory(keyStorePath, keyStorePW)
+    trustStorePath:Option[String],
+    trustStorePW:Option[String],
+    keyStorePath:Option[String],
+    keyStorePW:Option[String]):SSLContext = {
 
     val ctx = SSLContext.getInstance("SSL")   
-    
     ctx.init(
-      kmf.getKeyManagers, 
-      tmf.getTrustManagers, 
+      getKeyManagers(keyStorePath, keyStorePW).toArray,
+      getTrustManagers(trustStorePath, trustStorePW).toArray, 
       new SecureRandom())
-    
     ctx
   }
 
@@ -42,23 +38,28 @@ private [cassandra] object SSLSetup {
     ks
   }
 
-  def loadTrustManagerFactory(
-    trustStorePath:String,
-    trustStorePassword:String):TrustManagerFactory = {
+  def getTrustManagers(
+    trustStorePath:Option[String],
+    trustStorePassword:Option[String]):Seq[TrustManager] = {
     
-    val ts = loadKeyStore(trustStorePath, trustStorePassword)
-    val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
-    tmf.init(ts)
-    tmf
+    trustStorePath.toList.flatMap{ path =>
+      val ts = loadKeyStore(path, trustStorePassword.getOrElse("changeit"))
+      val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+      tmf.init(ts)
+      tmf.getTrustManagers
+    }
   }
 
-  def loadKeyManagerFactory(
-    keyStorePath:String,
-    keyStorePassword:String):KeyManagerFactory = {
-    
-    val ks = loadKeyStore(keyStorePath, keyStorePassword)
-    val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm)
-    kmf.init(ks, keyStorePassword.toCharArray)
-    kmf
+  def getKeyManagers(
+    keyStorePath:Option[String],
+    keyStorePassword:Option[String]):Seq[KeyManager] = {
+
+    keyStorePath.toList.flatMap { path =>
+      val password = keyStorePassword.getOrElse("changeit")
+      val ks = loadKeyStore(path, password)
+      val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm)
+      kmf.init(ks, password.toCharArray)
+      kmf.getKeyManagers
+    }
   }
 }
