@@ -3,6 +3,7 @@ package akka.persistence.cassandra.journal
 import scala.concurrent.duration._
 import akka.persistence.journal._
 import akka.persistence.cassandra.CassandraLifecycle
+import scala.concurrent.duration._
 
 import com.typesafe.config.ConfigFactory
 
