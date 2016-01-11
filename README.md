@@ -1,6 +1,8 @@
 Cassandra Plugins for Akka Persistence
 ======================================
 
+**Please note: work in this repository has been discontinued. The official location of the akka-persistence-cassandra project is now [here](https://github.com/akka/akka-persistence-cassandra).**
+
 [![Join the chat at https://gitter.im/krasserm/akka-persistence-cassandra](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/krasserm/akka-persistence-cassandra?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 Replicated [Akka Persistence](http://doc.akka.io/docs/akka/2.4.0/scala/persistence.html) journal and snapshot store backed by [Apache Cassandra](http://cassandra.apache.org/).
