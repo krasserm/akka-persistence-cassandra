@@ -39,7 +39,7 @@ class CassandraCompactionStrategySpec extends WordSpec with MustMatchers with Ca
   override protected def beforeAll(): Unit = {
     super.beforeAll()
 
-    cluster = clusterBuilder.build()
+    cluster = getClusterBuilder.build()
     session = cluster.connect()
 
     session.execute("CREATE KEYSPACE IF NOT EXISTS testKeyspace WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 }")

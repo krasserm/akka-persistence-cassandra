@@ -46,7 +46,7 @@ class CassandraSnapshotStore(cfg: Config) extends SnapshotStore with CassandraSt
       underlying.prepare(selectSnapshotMetadata(limit = None)).setConsistencyLevel(readConsistency)
 
     private def connect(): Session = {
-      retry(config.connectionRetries + 1, config.connectionRetryDelay.toMillis)(clusterBuilder.build().connect())
+      retry(config.connectionRetries + 1, config.connectionRetryDelay.toMillis)(getClusterBuilder.build().connect())
     }
 
     def close(): Unit = {
