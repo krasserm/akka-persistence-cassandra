@@ -48,7 +48,7 @@ To include a current development snapshot of the Cassandra plugins into your `sb
 
     resolvers += "OJO Snapshots" at "https://oss.jfrog.org/oss-snapshot-local" 
 
-    libraryDependencies += "com.github.krasserm" %% "akka-persistence-cassandra" % "0.7-SNAPSHOT"
+    libraryDependencies += "com.github.krasserm" %% "akka-persistence-cassandra" % "0.7.1-SNAPSHOT"
 
 This version of `akka-persistence-cassandra` depends on Akka 2.4 and Scala 2.11.6. It is compatible with Cassandra 2.1.6 or higher (versions < 2.1.6 have a static column bug).
    
