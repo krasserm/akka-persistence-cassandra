@@ -119,7 +119,7 @@ class CassandraConfigCheckerSpec extends TestKit(ActorSystem("test", config)) wi
 
   def createCassandraConfigChecker(implicit pluginConfig: CassandraPluginConfig, cfg: Config): CassandraConfigChecker = {
 
-    val clusterSession = pluginConfig.clusterBuilder.build.connect()
+    val clusterSession = pluginConfig.getClusterBuilder.build.connect()
 
     new CassandraConfigChecker {
       override def session: Session = clusterSession

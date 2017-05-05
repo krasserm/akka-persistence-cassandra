@@ -52,7 +52,7 @@ class CassandraJournal(cfg: Config) extends AsyncWriteJournal with CassandraReco
     val preparedInsertDeletedTo = underlying.prepare(insertDeletedTo).setConsistencyLevel(writeConsistency)
 
     private def connect(): Session = {
-      retry(config.connectionRetries + 1, config.connectionRetryDelay.toMillis)(clusterBuilder.build().connect())
+      retry(config.connectionRetries + 1, config.connectionRetryDelay.toMillis)(getClusterBuilder.build().connect())
     }
 
     def close(): Unit = {

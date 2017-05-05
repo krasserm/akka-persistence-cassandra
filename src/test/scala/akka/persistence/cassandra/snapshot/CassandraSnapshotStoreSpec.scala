@@ -37,7 +37,7 @@ class CassandraSnapshotStoreSpec extends SnapshotStoreSpec(CassandraSnapshotStor
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    cluster = clusterBuilder.build()
+    cluster = getClusterBuilder.build()
     session = cluster.connect()
   }
 
